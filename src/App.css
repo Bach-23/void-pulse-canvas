@@ -1,0 +1,452 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #050608;
+  color: #f5f5f5;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.app {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #050608;
+}
+
+/* =========================
+   0. 背景画像レイヤー
+========================= */
+
+.background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+
+  background-image:
+    linear-gradient(
+      rgba(5, 6, 8, 0.08),
+      rgba(5, 6, 8, 0.42)
+    ),
+    url("/images/void-bg-01.jpg");
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  filter:
+    saturate(0.96)
+    contrast(1.16)
+    brightness(0.92);
+
+  transform: scale(1.018);
+  transform-origin: center;
+}
+
+.background.is-running {
+  animation: imageBreathing var(--beat-duration) ease-in-out infinite;
+}
+
+.background.is-paused {
+  animation: none;
+}
+
+/* =========================
+   1. 小水紋：毎拍
+========================= */
+
+.small-ripple {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+
+  width: 14vmin;
+  height: 14vmin;
+  border-radius: 50%;
+  pointer-events: none;
+
+  border: 2px solid rgba(
+    220,
+    235,
+    255,
+    calc(0.12 + 0.56 * var(--small-ripple-intensity))
+  );
+
+  box-shadow:
+    0 0 calc(20px + 42px * var(--small-ripple-intensity))
+      rgba(190, 210, 255, calc(0.08 + 0.34 * var(--small-ripple-intensity))),
+    inset 0 0 calc(14px + 30px * var(--small-ripple-intensity))
+      rgba(220, 235, 255, calc(0.05 + 0.22 * var(--small-ripple-intensity)));
+
+  mix-blend-mode: screen;
+
+  transform: translate(-50%, -50%) scale(0.1);
+  animation: smallRipple var(--beat-duration) ease-out forwards;
+}
+
+/* =========================
+   2. 大水紋：小節頭
+   Freeでは表示しない
+========================= */
+
+.large-ripple {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+
+  width: 22vmin;
+  height: 22vmin;
+  border-radius: 50%;
+  pointer-events: none;
+
+  border: 3px solid rgba(
+    220,
+    235,
+    255,
+    calc(0.18 + 0.48 * var(--large-ripple-intensity))
+  );
+
+  box-shadow:
+    0 0 calc(36px + 52px * var(--large-ripple-intensity))
+      rgba(190, 210, 255, calc(0.12 + 0.36 * var(--large-ripple-intensity))),
+    inset 0 0 calc(28px + 42px * var(--large-ripple-intensity))
+      rgba(220, 235, 255, calc(0.08 + 0.24 * var(--large-ripple-intensity)));
+
+  mix-blend-mode: screen;
+
+  transform: translate(-50%, -50%) scale(0.08);
+  animation: largeRipple var(--large-ripple-duration) ease-out forwards;
+}
+
+/* =========================
+   3. 文字・UI
+========================= */
+
+.hero {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 48px;
+  backdrop-filter: blur(2px);
+  transition:
+    opacity 500ms ease,
+    transform 500ms ease,
+    filter 500ms ease;
+}
+
+.eyebrow {
+  margin: 0 0 24px;
+  color: rgba(220, 230, 245, 0.72);
+  font-size: clamp(18px, 3vw, 34px);
+  letter-spacing: 0.08em;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(52px, 9vw, 116px);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.subtitle {
+  margin: 40px 0 0;
+  color: rgba(220, 230, 245, 0.82);
+  font-size: clamp(20px, 4vw, 42px);
+  letter-spacing: 0.05em;
+}
+
+.controls {
+  margin-top: 48px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.bpm-control,
+.select-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border: 1px solid rgba(220, 230, 245, 0.24);
+  border-radius: 999px;
+  background: rgba(5, 6, 8, 0.36);
+  color: rgba(245, 245, 245, 0.8);
+  backdrop-filter: blur(8px);
+  letter-spacing: 0.12em;
+}
+
+.bpm-control span,
+.select-control span {
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.bpm-control input,
+.select-control select {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 18px;
+  text-align: center;
+}
+
+.bpm-control input {
+  width: 80px;
+}
+
+.select-control select {
+  width: 84px;
+  cursor: pointer;
+}
+
+.sound-control select {
+  width: 148px;
+}
+
+.select-control option {
+  background: #050608;
+  color: #f5f5f5;
+}
+
+.control-button {
+  padding: 14px 28px;
+  border: 1px solid rgba(220, 230, 245, 0.34);
+  border-radius: 999px;
+  background: rgba(5, 6, 8, 0.42);
+  color: rgba(245, 245, 245, 0.86);
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.control-button:hover {
+  background: rgba(220, 230, 245, 0.12);
+  border-color: rgba(220, 230, 245, 0.58);
+  transform: translateY(-1px);
+}
+
+/* =========================
+   3.5 Audio ON / OFF
+========================= */
+
+.audio-switch-group {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(220, 230, 245, 0.24);
+  border-radius: 999px;
+  background: rgba(5, 6, 8, 0.36);
+  backdrop-filter: blur(8px);
+}
+
+.audio-switch {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(220, 230, 245, 0.5);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.audio-switch:hover {
+  color: rgba(245, 245, 245, 0.86);
+}
+
+.audio-switch.is-active {
+  background: rgba(220, 235, 255, 0.18);
+  color: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    inset 0 0 18px rgba(220, 235, 255, 0.08),
+    0 0 22px rgba(190, 210, 255, 0.12);
+}
+
+/* =========================
+   4. 強度スライダー
+========================= */
+
+.sliders {
+  margin: 28px auto 0;
+  display: grid;
+  gap: 10px;
+  width: min(560px, 92vw);
+  padding: 18px 20px;
+  border: 1px solid rgba(220, 230, 245, 0.16);
+  border-radius: 20px;
+  background: rgba(5, 6, 8, 0.26);
+  backdrop-filter: blur(10px);
+}
+
+.slider-control {
+  display: grid;
+  grid-template-columns: 72px 1fr 36px;
+  align-items: center;
+  gap: 12px;
+  color: rgba(220, 230, 245, 0.7);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.slider-control input {
+  width: 100%;
+  accent-color: rgba(220, 235, 255, 0.8);
+}
+
+.slider-control em {
+  font-style: normal;
+  text-align: right;
+  color: rgba(245, 245, 245, 0.76);
+}
+
+/* =========================
+   5. ステータス表示
+========================= */
+
+.status {
+  position: fixed;
+  left: 32px;
+  bottom: 28px;
+  z-index: 3;
+  display: flex;
+  gap: 20px;
+  color: rgba(220, 230, 245, 0.62);
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition:
+    opacity 500ms ease,
+    transform 500ms ease,
+    filter 500ms ease;
+}
+
+/* =========================
+   6. UI表示 / 非表示
+========================= */
+
+.ui-panel {
+  will-change: opacity, transform, filter;
+}
+
+.app.ui-visible .ui-panel {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+  pointer-events: auto;
+  transition-duration: 500ms;
+}
+
+.app.ui-hidden .ui-panel {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(3px);
+  pointer-events: none;
+  transition-duration: 1000ms;
+}
+
+.app.ui-hidden {
+  cursor: none;
+}
+
+.app.ui-visible {
+  cursor: default;
+}
+
+/* =========================
+   7. アニメーション
+========================= */
+
+@keyframes imageBreathing {
+  0% {
+    filter:
+      saturate(0.98)
+      contrast(1.18)
+      brightness(calc(0.88 + 0.18 * var(--breath-intensity)));
+    transform: scale(calc(1.014 + 0.008 * var(--breath-intensity)));
+  }
+
+  50% {
+    filter:
+      saturate(0.82)
+      contrast(1.08)
+      brightness(calc(0.62 + 0.16 * var(--breath-intensity)));
+    transform: scale(calc(1.026 + 0.038 * var(--breath-intensity)));
+  }
+
+  100% {
+    filter:
+      saturate(0.98)
+      contrast(1.18)
+      brightness(calc(0.88 + 0.18 * var(--breath-intensity)));
+    transform: scale(calc(1.014 + 0.008 * var(--breath-intensity)));
+  }
+}
+
+@keyframes smallRipple {
+  0% {
+    opacity: calc(0.28 + 0.62 * var(--small-ripple-intensity));
+    transform: translate(-50%, -50%) scale(0.1);
+  }
+
+  55% {
+    opacity: calc(0.14 + 0.28 * var(--small-ripple-intensity));
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      scale(calc(1.8 + 1.5 * var(--small-ripple-intensity)));
+  }
+}
+
+@keyframes largeRipple {
+  0% {
+    opacity: calc(0.38 + 0.52 * var(--large-ripple-intensity));
+    transform: translate(-50%, -50%) scale(0.08);
+  }
+
+  55% {
+    opacity: calc(0.16 + 0.32 * var(--large-ripple-intensity));
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      scale(calc(4.8 + 2.4 * var(--large-ripple-intensity)));
+  }
+}
