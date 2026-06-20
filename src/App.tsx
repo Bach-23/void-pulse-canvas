@@ -11,9 +11,27 @@ type SavedSettings = {
   smallRippleIntensity: number
   largeRippleIntensity: number
   clickSound: ClickSound
+  volume: number
+  isDebugEnabled: boolean
+  isScoreVisible: boolean
+  scoreOpacity: number
+  scoreScale: number
+  scoreX: number
+  scoreY: number
+  scoreWhiteCut: number
+  scoreInkBoost: number
+}
+
+type DebugMetrics = {
+  targetMs: number
+  actualMs: number | null
+  diffMs: number | null
+  maxDiffMs: number
+  beatCount: number
 }
 
 const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
+const SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
 
 const defaultSettings: SavedSettings = {
   bpm: 105,
@@ -22,6 +40,15 @@ const defaultSettings: SavedSettings = {
   smallRippleIntensity: 100,
   largeRippleIntensity: 40,
   clickSound: 'Soft Tick',
+  volume: 70,
+  isDebugEnabled: false,
+  isScoreVisible: false,
+  scoreOpacity: 70,
+  scoreScale: 72,
+  scoreX: 0,
+  scoreY: 0,
+  scoreWhiteCut: 80,
+  scoreInkBoost: 30,
 }
 
 const clickSoundOptions: ClickSound[] = [
@@ -31,6 +58,18 @@ const clickSoundOptions: ClickSound[] = [
   'Breath',
   'Muted Key',
 ]
+
+const clampNumber = (
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+) => {
+  if (typeof value !== 'number') return fallback
+  if (Number.isNaN(value)) return fallback
+
+  return Math.min(Math.max(value, min), max)
+}
 
 function loadSettings(): SavedSettings {
   try {
@@ -43,7 +82,7 @@ function loadSettings(): SavedSettings {
     const parsed = JSON.parse(raw) as Partial<SavedSettings>
 
     return {
-      bpm: typeof parsed.bpm === 'number' ? parsed.bpm : defaultSettings.bpm,
+      bpm: clampNumber(parsed.bpm, 30, 240, defaultSettings.bpm),
 
       timeSignature:
         parsed.timeSignature === '2/4' ||
@@ -53,20 +92,26 @@ function loadSettings(): SavedSettings {
           ? parsed.timeSignature
           : defaultSettings.timeSignature,
 
-      breathIntensity:
-        typeof parsed.breathIntensity === 'number'
-          ? parsed.breathIntensity
-          : defaultSettings.breathIntensity,
+      breathIntensity: clampNumber(
+        parsed.breathIntensity,
+        0,
+        100,
+        defaultSettings.breathIntensity,
+      ),
 
-      smallRippleIntensity:
-        typeof parsed.smallRippleIntensity === 'number'
-          ? parsed.smallRippleIntensity
-          : defaultSettings.smallRippleIntensity,
+      smallRippleIntensity: clampNumber(
+        parsed.smallRippleIntensity,
+        0,
+        100,
+        defaultSettings.smallRippleIntensity,
+      ),
 
-      largeRippleIntensity:
-        typeof parsed.largeRippleIntensity === 'number'
-          ? parsed.largeRippleIntensity
-          : defaultSettings.largeRippleIntensity,
+      largeRippleIntensity: clampNumber(
+        parsed.largeRippleIntensity,
+        0,
+        100,
+        defaultSettings.largeRippleIntensity,
+      ),
 
       clickSound:
         parsed.clickSound === 'Soft Tick' ||
@@ -76,6 +121,50 @@ function loadSettings(): SavedSettings {
         parsed.clickSound === 'Muted Key'
           ? parsed.clickSound
           : defaultSettings.clickSound,
+
+      volume: clampNumber(parsed.volume, 0, 100, defaultSettings.volume),
+
+      isDebugEnabled:
+        typeof parsed.isDebugEnabled === 'boolean'
+          ? parsed.isDebugEnabled
+          : defaultSettings.isDebugEnabled,
+
+      isScoreVisible:
+        typeof parsed.isScoreVisible === 'boolean'
+          ? parsed.isScoreVisible
+          : defaultSettings.isScoreVisible,
+
+      scoreOpacity: clampNumber(
+        parsed.scoreOpacity,
+        0,
+        100,
+        defaultSettings.scoreOpacity,
+      ),
+
+      scoreScale: clampNumber(
+        parsed.scoreScale,
+        20,
+        160,
+        defaultSettings.scoreScale,
+      ),
+
+      scoreX: clampNumber(parsed.scoreX, -400, 400, defaultSettings.scoreX),
+
+      scoreY: clampNumber(parsed.scoreY, -300, 300, defaultSettings.scoreY),
+
+      scoreWhiteCut: clampNumber(
+        parsed.scoreWhiteCut,
+        50,
+        95,
+        defaultSettings.scoreWhiteCut,
+      ),
+
+      scoreInkBoost: clampNumber(
+        parsed.scoreInkBoost,
+        0,
+        60,
+        defaultSettings.scoreInkBoost,
+      ),
     }
   } catch {
     return defaultSettings
@@ -91,8 +180,22 @@ function App() {
   const [smallRippleKey, setSmallRippleKey] = useState(0)
   const [largeRippleKey, setLargeRippleKey] = useState(0)
   const [isUiVisible, setIsUiVisible] = useState(true)
+  const [isScoreImageLoaded, setIsScoreImageLoaded] = useState(false)
+
+  const [debugMetrics, setDebugMetrics] = useState<DebugMetrics>({
+    targetMs: 0,
+    actualMs: null,
+    diffMs: null,
+    maxDiffMs: 0,
+    beatCount: 0,
+  })
 
   const audioContextRef = useRef<AudioContext | null>(null)
+  const lastBeatTimeRef = useRef<number | null>(null)
+  const maxDiffRef = useRef(0)
+  const beatCountRef = useRef(0)
+  const scoreCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const scoreImageRef = useRef<HTMLImageElement | null>(null)
 
   const {
     bpm,
@@ -101,6 +204,15 @@ function App() {
     smallRippleIntensity,
     largeRippleIntensity,
     clickSound,
+    volume,
+    isDebugEnabled,
+    isScoreVisible,
+    scoreOpacity,
+    scoreScale,
+    scoreX,
+    scoreY,
+    scoreWhiteCut,
+    scoreInkBoost,
   } = settings
 
   const updateSettings = (nextSettings: Partial<SavedSettings>) => {
@@ -125,10 +237,26 @@ function App() {
     return 60 / safeBpm
   }, [safeBpm])
 
+  const targetBeatMs = useMemo(() => {
+    return beatDuration * 1000
+  }, [beatDuration])
+
   const largeRippleDuration = useMemo(() => {
     if (timeSignature === 'Free') return beatDuration
     return beatDuration * beatsPerBar
   }, [beatDuration, beatsPerBar, timeSignature])
+
+  const volumeRatio = useMemo(() => {
+    return Math.min(Math.max(volume, 0), 100) / 100
+  }, [volume])
+
+  const scoreOpacityRatio = useMemo(() => {
+    return Math.min(Math.max(scoreOpacity, 0), 100) / 100
+  }, [scoreOpacity])
+
+  const scoreScaleRatio = useMemo(() => {
+    return Math.min(Math.max(scoreScale, 20), 160) / 100
+  }, [scoreScale])
 
   const ensureAudioContext = async () => {
     if (!audioContextRef.current) {
@@ -140,6 +268,56 @@ function App() {
     }
 
     return audioContextRef.current
+  }
+
+  const resetDebugMetrics = () => {
+    lastBeatTimeRef.current = null
+    maxDiffRef.current = 0
+    beatCountRef.current = 0
+
+    setDebugMetrics({
+      targetMs: targetBeatMs,
+      actualMs: null,
+      diffMs: null,
+      maxDiffMs: 0,
+      beatCount: 0,
+    })
+  }
+
+  const updateDebugMetrics = () => {
+    const now = performance.now()
+    const previousBeatTime = lastBeatTimeRef.current
+
+    beatCountRef.current += 1
+
+    if (previousBeatTime === null) {
+      lastBeatTimeRef.current = now
+
+      setDebugMetrics({
+        targetMs: targetBeatMs,
+        actualMs: null,
+        diffMs: null,
+        maxDiffMs: maxDiffRef.current,
+        beatCount: beatCountRef.current,
+      })
+
+      return
+    }
+
+    const actualMs = now - previousBeatTime
+    const diffMs = actualMs - targetBeatMs
+    const absoluteDiffMs = Math.abs(diffMs)
+
+    maxDiffRef.current = Math.max(maxDiffRef.current, absoluteDiffMs)
+    lastBeatTimeRef.current = now
+
+    setDebugMetrics({
+      targetMs: targetBeatMs,
+      actualMs,
+      diffMs,
+      maxDiffMs: maxDiffRef.current,
+      beatCount: beatCountRef.current,
+    })
   }
 
   const createNoiseBuffer = (audioContext: AudioContext, duration: number) => {
@@ -155,6 +333,66 @@ function App() {
     }
 
     return buffer
+  }
+
+  const renderScoreCanvas = () => {
+    const canvas = scoreCanvasRef.current
+    const image = scoreImageRef.current
+
+    if (!canvas || !image) return
+    if (!image.naturalWidth || !image.naturalHeight) return
+
+    const width = image.naturalWidth
+    const height = image.naturalHeight
+    const context = canvas.getContext('2d')
+
+    if (!context) return
+
+    canvas.width = width
+    canvas.height = height
+
+    context.clearRect(0, 0, width, height)
+    context.drawImage(image, 0, 0, width, height)
+
+    const imageData = context.getImageData(0, 0, width, height)
+    const data = imageData.data
+
+    const paperCutRatio = Math.min(Math.max(scoreWhiteCut, 50), 95) / 100
+    const inkLiftRatio = Math.min(Math.max(scoreInkBoost, 0), 60) / 60
+
+    const whiteThreshold = 255 - paperCutRatio * 185
+    const fadeRange = Math.max(1, 255 - whiteThreshold)
+
+    for (let index = 0; index < data.length; index += 4) {
+      const red = data[index]
+      const green = data[index + 1]
+      const blue = data[index + 2]
+      const alpha = data[index + 3]
+
+      const brightness = (red + green + blue) / 3
+
+      if (brightness >= whiteThreshold) {
+        const whiteness = Math.min(1, (brightness - whiteThreshold) / fadeRange)
+        const remainingAlpha = Math.max(0, 1 - whiteness)
+
+        data[index + 3] = alpha * remainingAlpha
+        continue
+      }
+
+      const darkness = 1 - brightness / 255
+      const inkStrength = Math.min(1, darkness * inkLiftRatio * 0.8)
+
+      const targetRed = 226
+      const targetGreen = 235
+      const targetBlue = 248
+
+      data[index] = red * (1 - inkStrength) + targetRed * inkStrength
+      data[index + 1] = green * (1 - inkStrength) + targetGreen * inkStrength
+      data[index + 2] = blue * (1 - inkStrength) + targetBlue * inkStrength
+      data[index + 3] = Math.min(255, alpha * (0.72 + inkStrength * 0.34))
+    }
+
+    context.putImageData(imageData, 0, 0)
   }
 
   const playOscillatorClick = (
@@ -208,10 +446,15 @@ function App() {
       filterNode.frequency.setValueAtTime(1800, now)
     }
 
+    const adjustedPeakGain = Math.max(0.0001, peakGain * volumeRatio)
+
     oscillator.frequency.setValueAtTime(frequency, now)
 
     gainNode.gain.setValueAtTime(0.0001, now)
-    gainNode.gain.exponentialRampToValueAtTime(peakGain, now + 0.006)
+    gainNode.gain.exponentialRampToValueAtTime(
+      adjustedPeakGain,
+      now + 0.006,
+    )
     gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration)
 
     oscillator.connect(filterNode)
@@ -242,8 +485,13 @@ function App() {
     lowPassNode.frequency.setValueAtTime(isBarHead ? 1450 : 1050, now)
     lowPassNode.Q.setValueAtTime(0.7, now)
 
+    const breathPeakGain = (isBarHead ? 0.085 : 0.055) * volumeRatio
+
     gainNode.gain.setValueAtTime(0.0001, now)
-    gainNode.gain.linearRampToValueAtTime(isBarHead ? 0.085 : 0.055, now + 0.045)
+    gainNode.gain.linearRampToValueAtTime(
+      Math.max(0.0001, breathPeakGain),
+      now + 0.045,
+    )
     gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.18)
 
     source.connect(highPassNode)
@@ -257,6 +505,7 @@ function App() {
 
   const playClick = async (isBarHead: boolean) => {
     if (!isAudioEnabled) return
+    if (volumeRatio <= 0) return
 
     const audioContext = await ensureAudioContext()
     const now = audioContext.currentTime
@@ -283,9 +532,41 @@ function App() {
   }, [settings])
 
   useEffect(() => {
-    if (!isRunning) return
+    const image = new Image()
+    image.src = SCORE_IMAGE_SRC
+
+    image.onload = () => {
+      scoreImageRef.current = image
+      setIsScoreImageLoaded(true)
+    }
+
+    image.onerror = () => {
+      scoreImageRef.current = null
+      setIsScoreImageLoaded(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isScoreVisible) return
+    if (!isScoreImageLoaded) return
+
+    window.requestAnimationFrame(() => {
+      renderScoreCanvas()
+    })
+  }, [isScoreVisible, isScoreImageLoaded, scoreWhiteCut, scoreInkBoost])
+
+  useEffect(() => {
+    resetDebugMetrics()
+  }, [targetBeatMs, timeSignature])
+
+  useEffect(() => {
+    if (!isRunning) {
+      lastBeatTimeRef.current = null
+      return
+    }
 
     const intervalId = window.setInterval(() => {
+      updateDebugMetrics()
       setSmallRippleKey((key) => key + 1)
 
       setCurrentBeat((beat) => {
@@ -312,6 +593,8 @@ function App() {
     beatsPerBar,
     timeSignature,
     clickSound,
+    volumeRatio,
+    targetBeatMs,
   ])
 
   useEffect(() => {
@@ -363,10 +646,20 @@ function App() {
           '--breath-intensity': breathIntensity / 100,
           '--small-ripple-intensity': smallRippleIntensity / 100,
           '--large-ripple-intensity': largeRippleIntensity / 100,
+          '--score-opacity': scoreOpacityRatio,
+          '--score-scale': scoreScaleRatio,
+          '--score-x': `${scoreX}px`,
+          '--score-y': `${scoreY}px`,
         } as React.CSSProperties
       }
     >
       <div className={`background ${isRunning ? 'is-running' : 'is-paused'}`} />
+
+      {isScoreVisible && (
+        <div className="score-overlay">
+          <canvas ref={scoreCanvasRef} />
+        </div>
+      )}
 
       {isRunning && (
         <>
@@ -458,9 +751,57 @@ function App() {
               Audio OFF
             </button>
           </div>
+
+          <div className="debug-switch-group">
+            <button
+              className={`debug-switch ${isDebugEnabled ? 'is-active' : ''}`}
+              onClick={() => updateSettings({ isDebugEnabled: true })}
+            >
+              Debug ON
+            </button>
+
+            <button
+              className={`debug-switch ${!isDebugEnabled ? 'is-active' : ''}`}
+              onClick={() => updateSettings({ isDebugEnabled: false })}
+            >
+              Debug OFF
+            </button>
+          </div>
+
+          <div className="score-switch-group">
+            <button
+              className={`score-switch ${isScoreVisible ? 'is-active' : ''}`}
+              onClick={() => updateSettings({ isScoreVisible: true })}
+            >
+              Score ON
+            </button>
+
+            <button
+              className={`score-switch ${!isScoreVisible ? 'is-active' : ''}`}
+              onClick={() => updateSettings({ isScoreVisible: false })}
+            >
+              Score OFF
+            </button>
+          </div>
         </div>
 
         <div className="sliders">
+          <label className="slider-control">
+            <span>Volume</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={volume}
+              onChange={(event) =>
+                updateSettings({
+                  volume: Number(event.target.value),
+                })
+              }
+            />
+            <em>{volume}</em>
+          </label>
+
           <label className="slider-control">
             <span>Breath</span>
             <input
@@ -508,6 +849,102 @@ function App() {
             />
             <em>{largeRippleIntensity}</em>
           </label>
+
+          <label className="slider-control">
+            <span>Score Visibility</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={scoreOpacity}
+              onChange={(event) =>
+                updateSettings({
+                  scoreOpacity: Number(event.target.value),
+                })
+              }
+            />
+            <em>{scoreOpacity}</em>
+          </label>
+
+          <label className="slider-control">
+            <span>Score Size</span>
+            <input
+              type="range"
+              min="20"
+              max="160"
+              value={scoreScale}
+              onChange={(event) =>
+                updateSettings({
+                  scoreScale: Number(event.target.value),
+                })
+              }
+            />
+            <em>{scoreScale}</em>
+          </label>
+
+          <label className="slider-control">
+            <span>Score X</span>
+            <input
+              type="range"
+              min="-400"
+              max="400"
+              value={scoreX}
+              onChange={(event) =>
+                updateSettings({
+                  scoreX: Number(event.target.value),
+                })
+              }
+            />
+            <em>{scoreX}</em>
+          </label>
+
+          <label className="slider-control">
+            <span>Score Y</span>
+            <input
+              type="range"
+              min="-300"
+              max="300"
+              value={scoreY}
+              onChange={(event) =>
+                updateSettings({
+                  scoreY: Number(event.target.value),
+                })
+              }
+            />
+            <em>{scoreY}</em>
+          </label>
+
+          <label className="slider-control">
+            <span>Paper Cut</span>
+            <input
+              type="range"
+              min="50"
+              max="95"
+              value={scoreWhiteCut}
+              onChange={(event) =>
+                updateSettings({
+                  scoreWhiteCut: Number(event.target.value),
+                })
+              }
+            />
+            <em>{scoreWhiteCut}</em>
+          </label>
+
+          <label className="slider-control">
+            <span>Ink Lift</span>
+            <input
+              type="range"
+              min="0"
+              max="60"
+              value={scoreInkBoost}
+              onChange={(event) =>
+                updateSettings({
+                  scoreInkBoost: Number(event.target.value),
+                })
+              }
+            />
+            <em>{scoreInkBoost}</em>
+          </label>
         </div>
       </section>
 
@@ -515,6 +952,8 @@ function App() {
         <span>{safeBpm} BPM</span>
         <span>{timeSignature}</span>
         <span>{clickSound}</span>
+        <span>VOL {volume}</span>
+        <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
         <span>
           {timeSignature === 'Free'
             ? 'No Meter'
@@ -523,6 +962,27 @@ function App() {
         <span>{isRunning ? 'Pulse ON' : 'Pulse OFF'}</span>
         <span>{isAudioEnabled ? 'Audio ON' : 'Audio OFF'}</span>
       </div>
+
+      {isDebugEnabled && (
+        <div className="debug-panel ui-panel">
+          <span>Debug</span>
+          <span>Target {debugMetrics.targetMs.toFixed(1)}ms</span>
+          <span>
+            Actual{' '}
+            {debugMetrics.actualMs === null
+              ? '--'
+              : `${debugMetrics.actualMs.toFixed(1)}ms`}
+          </span>
+          <span>
+            Diff{' '}
+            {debugMetrics.diffMs === null
+              ? '--'
+              : `${debugMetrics.diffMs >= 0 ? '+' : ''}${debugMetrics.diffMs.toFixed(1)}ms`}
+          </span>
+          <span>Max ±{debugMetrics.maxDiffMs.toFixed(1)}ms</span>
+          <span>Count {debugMetrics.beatCount}</span>
+        </div>
+      )}
     </main>
   )
 }

@@ -13,12 +13,7 @@ body,
 body {
   background: #050608;
   color: #f5f5f5;
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: system-ui, "Segoe UI", sans-serif;
 }
 
 .app {
@@ -30,31 +25,20 @@ body {
   background: #050608;
 }
 
-/* =========================
-   0. 背景画像レイヤー
-========================= */
-
 .background {
   position: absolute;
   inset: 0;
   z-index: 0;
-
   background-image:
     linear-gradient(
       rgba(5, 6, 8, 0.08),
       rgba(5, 6, 8, 0.42)
     ),
     url("/images/void-bg-01.jpg");
-
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-
-  filter:
-    saturate(0.96)
-    contrast(1.16)
-    brightness(0.92);
-
+  filter: saturate(0.96) contrast(1.16) brightness(0.92);
   transform: scale(1.018);
   transform-origin: center;
 }
@@ -67,84 +51,86 @@ body {
   animation: none;
 }
 
-/* =========================
-   1. 小水紋：毎拍
-========================= */
+.score-overlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: min(74vw, 980px);
+  transform:
+    translate(-50%, -50%)
+    translate(var(--score-x), var(--score-y))
+    scale(var(--score-scale));
+  opacity: var(--score-opacity);
+  pointer-events: none;
+  mix-blend-mode: screen;
+  filter:
+    drop-shadow(0 0 18px rgba(220, 235, 255, 0.16))
+    contrast(1.08);
+}
+
+.score-overlay canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
 
 .small-ripple {
   position: absolute;
   left: 50%;
   top: 50%;
-  z-index: 1;
-
+  z-index: 2;
   width: 14vmin;
   height: 14vmin;
   border-radius: 50%;
   pointer-events: none;
-
   border: 2px solid rgba(
     220,
     235,
     255,
     calc(0.12 + 0.56 * var(--small-ripple-intensity))
   );
-
   box-shadow:
     0 0 calc(20px + 42px * var(--small-ripple-intensity))
       rgba(190, 210, 255, calc(0.08 + 0.34 * var(--small-ripple-intensity))),
     inset 0 0 calc(14px + 30px * var(--small-ripple-intensity))
       rgba(220, 235, 255, calc(0.05 + 0.22 * var(--small-ripple-intensity)));
-
   mix-blend-mode: screen;
-
   transform: translate(-50%, -50%) scale(0.1);
   animation: smallRipple var(--beat-duration) ease-out forwards;
 }
-
-/* =========================
-   2. 大水紋：小節頭
-   Freeでは表示しない
-========================= */
 
 .large-ripple {
   position: absolute;
   left: 50%;
   top: 50%;
-  z-index: 1;
-
+  z-index: 2;
   width: 22vmin;
   height: 22vmin;
   border-radius: 50%;
   pointer-events: none;
-
   border: 3px solid rgba(
     220,
     235,
     255,
     calc(0.18 + 0.48 * var(--large-ripple-intensity))
   );
-
   box-shadow:
     0 0 calc(36px + 52px * var(--large-ripple-intensity))
       rgba(190, 210, 255, calc(0.12 + 0.36 * var(--large-ripple-intensity))),
     inset 0 0 calc(28px + 42px * var(--large-ripple-intensity))
       rgba(220, 235, 255, calc(0.08 + 0.24 * var(--large-ripple-intensity)));
-
   mix-blend-mode: screen;
-
   transform: translate(-50%, -50%) scale(0.08);
   animation: largeRipple var(--large-ripple-duration) ease-out forwards;
 }
 
-/* =========================
-   3. 文字・UI
-========================= */
-
 .hero {
   position: relative;
-  z-index: 2;
+  z-index: 3;
+  width: min(960px, 94vw);
   text-align: center;
-  padding: 48px;
+  padding: 44px;
   backdrop-filter: blur(2px);
   transition:
     opacity 500ms ease,
@@ -153,129 +139,154 @@ body {
 }
 
 .eyebrow {
-  margin: 0 0 24px;
+  margin: 0 0 20px;
   color: rgba(220, 230, 245, 0.72);
-  font-size: clamp(18px, 3vw, 34px);
+  font-size: clamp(16px, 2.4vw, 28px);
   letter-spacing: 0.08em;
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(52px, 9vw, 116px);
+  font-size: clamp(52px, 8.4vw, 112px);
   line-height: 0.95;
   letter-spacing: -0.06em;
   color: rgba(255, 255, 255, 0.94);
 }
 
 .subtitle {
-  margin: 40px 0 0;
-  color: rgba(220, 230, 245, 0.82);
-  font-size: clamp(20px, 4vw, 42px);
+  margin: 34px 0 0;
+  color: rgba(220, 230, 245, 0.78);
+  font-size: clamp(17px, 3vw, 32px);
   letter-spacing: 0.05em;
 }
 
-.controls {
-  margin-top: 48px;
+.primary-action-row {
+  margin-top: 44px;
+  display: flex;
+  justify-content: center;
+}
+
+.pulse-button {
+  min-width: 260px;
+  padding: 20px 48px;
+  border: 1px solid rgba(220, 235, 255, 0.44);
+  border-radius: 999px;
+  background:
+    radial-gradient(
+      circle at 50% 20%,
+      rgba(220, 235, 255, 0.22),
+      rgba(5, 6, 8, 0.42)
+    );
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 18px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 0 42px rgba(190, 210, 255, 0.2),
+    inset 0 0 24px rgba(220, 235, 255, 0.08);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.pulse-button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(220, 235, 255, 0.68);
+  box-shadow:
+    0 0 58px rgba(190, 210, 255, 0.28),
+    inset 0 0 28px rgba(220, 235, 255, 0.12);
+}
+
+.pulse-button.is-active {
+  background:
+    radial-gradient(
+      circle at 50% 20%,
+      rgba(220, 235, 255, 0.28),
+      rgba(5, 6, 8, 0.34)
+    );
+}
+
+.secondary-controls {
+  margin-top: 26px;
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 18px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.bpm-control,
-.select-control {
+.compact-control {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 18px;
-  border: 1px solid rgba(220, 230, 245, 0.24);
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(220, 230, 245, 0.18);
   border-radius: 999px;
-  background: rgba(5, 6, 8, 0.36);
-  color: rgba(245, 245, 245, 0.8);
+  background: rgba(5, 6, 8, 0.28);
+  color: rgba(245, 245, 245, 0.68);
   backdrop-filter: blur(8px);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
 }
 
-.bpm-control span,
-.select-control span {
-  font-size: 13px;
+.compact-control span {
+  font-size: 11px;
   text-transform: uppercase;
 }
 
-.bpm-control input,
-.select-control select {
+.compact-control input,
+.compact-control select {
   border: none;
   outline: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 18px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
   text-align: center;
 }
 
-.bpm-control input {
-  width: 80px;
+.compact-control input {
+  width: 68px;
 }
 
-.select-control select {
-  width: 84px;
+.compact-control select {
+  width: 74px;
   cursor: pointer;
 }
 
 .sound-control select {
-  width: 148px;
+  width: 132px;
 }
 
-.select-control option {
+.compact-control option {
   background: #050608;
   color: #f5f5f5;
 }
 
-.control-button {
-  padding: 14px 28px;
-  border: 1px solid rgba(220, 230, 245, 0.34);
-  border-radius: 999px;
-  background: rgba(5, 6, 8, 0.42);
-  color: rgba(245, 245, 245, 0.86);
-  font-size: 14px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  transition:
-    background 180ms ease,
-    border-color 180ms ease,
-    transform 180ms ease;
-}
-
-.control-button:hover {
-  background: rgba(220, 230, 245, 0.12);
-  border-color: rgba(220, 230, 245, 0.58);
-  transform: translateY(-1px);
-}
-
-/* =========================
-   3.5 Audio ON / OFF
-========================= */
-
-.audio-switch-group {
+.audio-switch-group,
+.debug-switch-group,
+.score-switch-group {
   display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid rgba(220, 230, 245, 0.24);
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(220, 230, 245, 0.18);
   border-radius: 999px;
-  background: rgba(5, 6, 8, 0.36);
+  background: rgba(5, 6, 8, 0.28);
   backdrop-filter: blur(8px);
 }
 
-.audio-switch {
-  padding: 10px 18px;
+.audio-switch,
+.debug-switch,
+.score-switch {
+  padding: 8px 12px;
   border: none;
   border-radius: 999px;
   background: transparent;
-  color: rgba(220, 230, 245, 0.5);
-  font-size: 13px;
-  letter-spacing: 0.14em;
+  color: rgba(220, 230, 245, 0.46);
+  font-size: 11px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   cursor: pointer;
   transition:
@@ -284,70 +295,66 @@ h1 {
     transform 180ms ease;
 }
 
-.audio-switch:hover {
-  color: rgba(245, 245, 245, 0.86);
+.audio-switch:hover,
+.debug-switch:hover,
+.score-switch:hover {
+  color: rgba(245, 245, 245, 0.82);
 }
 
-.audio-switch.is-active {
-  background: rgba(220, 235, 255, 0.18);
-  color: rgba(255, 255, 255, 0.94);
+.audio-switch.is-active,
+.debug-switch.is-active,
+.score-switch.is-active {
+  background: rgba(220, 235, 255, 0.16);
+  color: rgba(255, 255, 255, 0.92);
   box-shadow:
-    inset 0 0 18px rgba(220, 235, 255, 0.08),
-    0 0 22px rgba(190, 210, 255, 0.12);
+    inset 0 0 14px rgba(220, 235, 255, 0.07),
+    0 0 16px rgba(190, 210, 255, 0.1);
 }
-
-/* =========================
-   4. 強度スライダー
-========================= */
 
 .sliders {
-  margin: 28px auto 0;
+  margin: 22px auto 0;
   display: grid;
-  gap: 10px;
-  width: min(560px, 92vw);
-  padding: 18px 20px;
-  border: 1px solid rgba(220, 230, 245, 0.16);
-  border-radius: 20px;
-  background: rgba(5, 6, 8, 0.26);
+  gap: 8px;
+  width: min(560px, 90vw);
+  padding: 14px 16px;
+  border: 1px solid rgba(220, 230, 245, 0.12);
+  border-radius: 18px;
+  background: rgba(5, 6, 8, 0.22);
   backdrop-filter: blur(10px);
 }
 
 .slider-control {
   display: grid;
-  grid-template-columns: 72px 1fr 36px;
+  grid-template-columns: 110px 1fr 42px;
   align-items: center;
-  gap: 12px;
-  color: rgba(220, 230, 245, 0.7);
-  font-size: 13px;
-  letter-spacing: 0.12em;
+  gap: 10px;
+  color: rgba(220, 230, 245, 0.58);
+  font-size: 11px;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
 }
 
 .slider-control input {
   width: 100%;
-  accent-color: rgba(220, 235, 255, 0.8);
+  accent-color: rgba(220, 235, 255, 0.78);
 }
 
 .slider-control em {
   font-style: normal;
   text-align: right;
-  color: rgba(245, 245, 245, 0.76);
+  color: rgba(245, 245, 245, 0.66);
 }
-
-/* =========================
-   5. ステータス表示
-========================= */
 
 .status {
   position: fixed;
   left: 32px;
   bottom: 28px;
-  z-index: 3;
+  z-index: 4;
   display: flex;
-  gap: 20px;
-  color: rgba(220, 230, 245, 0.62);
-  font-size: 14px;
-  letter-spacing: 0.12em;
+  gap: 18px;
+  color: rgba(220, 230, 245, 0.56);
+  font-size: 12px;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   transition:
     opacity 500ms ease,
@@ -355,9 +362,36 @@ h1 {
     filter 500ms ease;
 }
 
-/* =========================
-   6. UI表示 / 非表示
-========================= */
+.debug-panel {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 4;
+  display: grid;
+  gap: 5px;
+  min-width: 190px;
+  padding: 14px 16px;
+  border: 1px solid rgba(220, 230, 245, 0.18);
+  border-radius: 18px;
+  background: rgba(5, 6, 8, 0.36);
+  color: rgba(220, 230, 245, 0.7);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 0 24px rgba(0, 0, 0, 0.24),
+    inset 0 0 18px rgba(220, 235, 255, 0.04);
+  transition:
+    opacity 500ms ease,
+    transform 500ms ease,
+    filter 500ms ease;
+}
+
+.debug-panel span:first-child {
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.16em;
+}
 
 .ui-panel {
   will-change: opacity, transform, filter;
@@ -387,31 +421,21 @@ h1 {
   cursor: default;
 }
 
-/* =========================
-   7. アニメーション
-========================= */
-
 @keyframes imageBreathing {
   0% {
-    filter:
-      saturate(0.98)
-      contrast(1.18)
+    filter: saturate(0.98) contrast(1.18)
       brightness(calc(0.88 + 0.18 * var(--breath-intensity)));
     transform: scale(calc(1.014 + 0.008 * var(--breath-intensity)));
   }
 
   50% {
-    filter:
-      saturate(0.82)
-      contrast(1.08)
+    filter: saturate(0.82) contrast(1.08)
       brightness(calc(0.62 + 0.16 * var(--breath-intensity)));
     transform: scale(calc(1.026 + 0.038 * var(--breath-intensity)));
   }
 
   100% {
-    filter:
-      saturate(0.98)
-      contrast(1.18)
+    filter: saturate(0.98) contrast(1.18)
       brightness(calc(0.88 + 0.18 * var(--breath-intensity)));
     transform: scale(calc(1.014 + 0.008 * var(--breath-intensity)));
   }
