@@ -8,6 +8,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 type TimeSignature = '2/4' | '3/4' | '4/4' | 'Free'
 type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
+type ClickSubdivision = 'Quarter' | 'Eighth'
+type BeatIntensity = 'High' | 'Mid' | 'Low'
+
+type BackgroundMode =
+  | 'Image'
+  | 'Void Black'
+  | 'Warm Gray'
+  | 'Deep Blue'
+  | 'Paper Dark'
 
 type PresetName =
   | 'Current'
@@ -24,6 +33,7 @@ type PresetValues = {
   smallRippleIntensity: number
   largeRippleIntensity: number
   clickSound: ClickSound
+  clickSubdivision: ClickSubdivision
   volume: number
   isScoreVisible: boolean
   scoreOpacity: number
@@ -32,6 +42,7 @@ type PresetValues = {
   scoreY: number
   scoreWhiteCut: number
   scoreInkBoost: number
+  backgroundMode: BackgroundMode
 }
 
 type SavedSettings = PresetValues & {
@@ -48,8 +59,16 @@ type DebugMetrics = {
   beatCount: number
 }
 
+type PdfSlot = {
+  pdf: any | null
+  fileName: string
+  pageNumber: number
+  pageCount: number
+}
+
 const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
 const DEFAULT_SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
+const PDF_SLOT_COUNT = 10
 
 const defaultPresetValues: PresetValues = {
   bpm: 105,
@@ -58,6 +77,7 @@ const defaultPresetValues: PresetValues = {
   smallRippleIntensity: 100,
   largeRippleIntensity: 40,
   clickSound: 'Soft Tick',
+  clickSubdivision: 'Quarter',
   volume: 70,
   isScoreVisible: false,
   scoreOpacity: 70,
@@ -66,6 +86,7 @@ const defaultPresetValues: PresetValues = {
   scoreY: 0,
   scoreWhiteCut: 80,
   scoreInkBoost: 30,
+  backgroundMode: 'Image',
 }
 
 const defaultSettings: SavedSettings = {
@@ -83,6 +104,8 @@ const clickSoundOptions: ClickSound[] = [
   'Muted Key',
 ]
 
+const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth']
+
 const presetOptions: PresetName[] = [
   'Current',
   'Void / Score Float',
@@ -92,6 +115,24 @@ const presetOptions: PresetName[] = [
   'My Saved Preset',
 ]
 
+const backgroundModeOptions: BackgroundMode[] = [
+  'Image',
+  'Void Black',
+  'Warm Gray',
+  'Deep Blue',
+  'Paper Dark',
+]
+
+const createEmptyPdfSlot = (): PdfSlot => ({
+  pdf: null,
+  fileName: '',
+  pageNumber: 1,
+  pageCount: 0,
+})
+
+const createInitialPdfSlots = (): PdfSlot[] =>
+  Array.from({ length: PDF_SLOT_COUNT }, () => createEmptyPdfSlot())
+
 const clampNumber = (
   value: unknown,
   min: number,
@@ -100,7 +141,6 @@ const clampNumber = (
 ) => {
   if (typeof value !== 'number') return fallback
   if (Number.isNaN(value)) return fallback
-
   return Math.min(Math.max(value, min), max)
 }
 
@@ -123,6 +163,10 @@ const isClickSound = (value: unknown): value is ClickSound => {
   )
 }
 
+const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
+  return value === 'Quarter' || value === 'Eighth'
+}
+
 const isPresetName = (value: unknown): value is PresetName => {
   return (
     value === 'Current' ||
@@ -131,6 +175,16 @@ const isPresetName = (value: unknown): value is PresetName => {
     value === 'Void / Recording' ||
     value === 'Void / Night' ||
     value === 'My Saved Preset'
+  )
+}
+
+const isBackgroundMode = (value: unknown): value is BackgroundMode => {
+  return (
+    value === 'Image' ||
+    value === 'Void Black' ||
+    value === 'Warm Gray' ||
+    value === 'Deep Blue' ||
+    value === 'Paper Dark'
   )
 }
 
@@ -170,6 +224,10 @@ const normalizePresetValues = (
       ? value.clickSound
       : fallback.clickSound,
 
+    clickSubdivision: isClickSubdivision(value?.clickSubdivision)
+      ? value.clickSubdivision
+      : fallback.clickSubdivision,
+
     volume: clampNumber(value?.volume, 0, 100, fallback.volume),
 
     isScoreVisible:
@@ -203,6 +261,10 @@ const normalizePresetValues = (
       60,
       fallback.scoreInkBoost,
     ),
+
+    backgroundMode: isBackgroundMode(value?.backgroundMode)
+      ? value.backgroundMode
+      : fallback.backgroundMode,
   }
 }
 
@@ -261,10 +323,10 @@ function App() {
   )
   const [scoreImageName, setScoreImageName] = useState('Default Score')
 
-  const [isPdfLoaded, setIsPdfLoaded] = useState(false)
-  const [pdfFileName, setPdfFileName] = useState('')
-  const [pdfPageNumber, setPdfPageNumber] = useState(1)
-  const [pdfPageCount, setPdfPageCount] = useState(0)
+  const [pdfSlots, setPdfSlots] = useState<PdfSlot[]>(() =>
+    createInitialPdfSlots(),
+  )
+  const [activePdfSlotIndex, setActivePdfSlotIndex] = useState(0)
 
   const [debugMetrics, setDebugMetrics] = useState<DebugMetrics>({
     targetMs: 0,
@@ -283,7 +345,6 @@ function App() {
   const scoreImageRef = useRef<HTMLImageElement | null>(null)
   const scoreFileInputRef = useRef<HTMLInputElement | null>(null)
   const scorePdfInputRef = useRef<HTMLInputElement | null>(null)
-  const pdfDocumentRef = useRef<any>(null)
 
   const {
     bpm,
@@ -292,6 +353,7 @@ function App() {
     smallRippleIntensity,
     largeRippleIntensity,
     clickSound,
+    clickSubdivision,
     volume,
     isDebugEnabled,
     isScoreVisible,
@@ -303,13 +365,27 @@ function App() {
     scoreInkBoost,
     selectedPreset,
     savedPreset,
+    backgroundMode,
   } = settings
+
+  const activePdfSlot = pdfSlots[activePdfSlotIndex]
+  const isPdfLoaded = Boolean(activePdfSlot?.pdf)
+  const pdfPageNumber = activePdfSlot?.pageNumber ?? 1
+  const pdfPageCount = activePdfSlot?.pageCount ?? 0
 
   const updateSettings = (nextSettings: Partial<SavedSettings>) => {
     setSettings((currentSettings) => ({
       ...currentSettings,
       ...nextSettings,
     }))
+  }
+
+  const updatePdfSlot = (slotIndex: number, nextSlot: Partial<PdfSlot>) => {
+    setPdfSlots((currentSlots) =>
+      currentSlots.map((slot, index) =>
+        index === slotIndex ? { ...slot, ...nextSlot } : slot,
+      ),
+    )
   }
 
   const getCurrentPresetValues = (): PresetValues => {
@@ -320,6 +396,7 @@ function App() {
       smallRippleIntensity,
       largeRippleIntensity,
       clickSound,
+      clickSubdivision,
       volume,
       isScoreVisible,
       scoreOpacity,
@@ -328,6 +405,7 @@ function App() {
       scoreY,
       scoreWhiteCut,
       scoreInkBoost,
+      backgroundMode,
     }
   }
 
@@ -339,13 +417,10 @@ function App() {
   }
 
   const applyPreset = () => {
-    if (selectedPreset === 'Current') {
-      return
-    }
+    if (selectedPreset === 'Current') return
 
     if (selectedPreset === 'My Saved Preset') {
       if (!savedPreset) return
-
       updateSettings({ ...savedPreset })
       return
     }
@@ -358,6 +433,7 @@ function App() {
         smallRippleIntensity: 100,
         largeRippleIntensity: 40,
         clickSound: 'Muted Key',
+        clickSubdivision: 'Quarter',
         volume: 70,
         isScoreVisible: true,
         scoreOpacity: 70,
@@ -366,8 +442,8 @@ function App() {
         scoreY: 0,
         scoreWhiteCut: 80,
         scoreInkBoost: 30,
+        backgroundMode: 'Image',
       })
-
       return
     }
 
@@ -379,6 +455,7 @@ function App() {
         smallRippleIntensity: 100,
         largeRippleIntensity: 36,
         clickSound: 'Soft Tick',
+        clickSubdivision: 'Quarter',
         volume: 72,
         isScoreVisible: true,
         scoreOpacity: 82,
@@ -387,8 +464,8 @@ function App() {
         scoreY: 0,
         scoreWhiteCut: 78,
         scoreInkBoost: 24,
+        backgroundMode: 'Warm Gray',
       })
-
       return
     }
 
@@ -400,6 +477,7 @@ function App() {
         smallRippleIntensity: 72,
         largeRippleIntensity: 32,
         clickSound: 'Muted Key',
+        clickSubdivision: 'Quarter',
         volume: 48,
         isScoreVisible: true,
         scoreOpacity: 58,
@@ -408,8 +486,8 @@ function App() {
         scoreY: 0,
         scoreWhiteCut: 82,
         scoreInkBoost: 22,
+        backgroundMode: 'Void Black',
       })
-
       return
     }
 
@@ -421,6 +499,7 @@ function App() {
         smallRippleIntensity: 76,
         largeRippleIntensity: 30,
         clickSound: 'Breath',
+        clickSubdivision: 'Quarter',
         volume: 54,
         isScoreVisible: true,
         scoreOpacity: 46,
@@ -429,6 +508,7 @@ function App() {
         scoreY: 0,
         scoreWhiteCut: 84,
         scoreInkBoost: 18,
+        backgroundMode: 'Deep Blue',
       })
     }
   }
@@ -437,7 +517,6 @@ function App() {
     if (timeSignature === '2/4') return 2
     if (timeSignature === '3/4') return 3
     if (timeSignature === '4/4') return 4
-
     return 1
   }, [timeSignature])
 
@@ -455,7 +534,6 @@ function App() {
 
   const largeRippleDuration = useMemo(() => {
     if (timeSignature === 'Free') return beatDuration
-
     return beatDuration * beatsPerBar
   }, [beatDuration, beatsPerBar, timeSignature])
 
@@ -470,6 +548,46 @@ function App() {
   const scoreScaleRatio = useMemo(() => {
     return Math.min(Math.max(scoreScale, 20), 160) / 100
   }, [scoreScale])
+
+  const backgroundInlineStyle = useMemo<CSSProperties>(() => {
+    if (backgroundMode === 'Image') {
+      return {
+        backgroundImage:
+          'linear-gradient(rgba(5, 6, 8, 0.08), rgba(5, 6, 8, 0.42)), url("/images/void-bg-01.jpg")',
+        backgroundColor: '#050608',
+      }
+    }
+
+    if (backgroundMode === 'Void Black') {
+      return {
+        backgroundImage:
+          'radial-gradient(circle at 50% 45%, rgba(35, 38, 46, 0.46), rgba(5, 6, 8, 1) 62%)',
+        backgroundColor: '#050608',
+      }
+    }
+
+    if (backgroundMode === 'Warm Gray') {
+      return {
+        backgroundImage:
+          'linear-gradient(135deg, rgba(60, 56, 50, 1), rgba(22, 21, 20, 1))',
+        backgroundColor: '#292622',
+      }
+    }
+
+    if (backgroundMode === 'Deep Blue') {
+      return {
+        backgroundImage:
+          'radial-gradient(circle at 50% 40%, rgba(22, 40, 66, 0.95), rgba(4, 8, 16, 1) 68%)',
+        backgroundColor: '#040810',
+      }
+    }
+
+    return {
+      backgroundImage:
+        'linear-gradient(135deg, rgba(31, 32, 32, 1), rgba(11, 12, 12, 1))',
+      backgroundColor: '#151616',
+    }
+  }, [backgroundMode])
 
   const ensureAudioContext = async () => {
     if (!audioContextRef.current) {
@@ -615,12 +733,9 @@ function App() {
     updateSettings({ isScoreVisible: true })
   }
 
-  const resetPdfState = () => {
-    pdfDocumentRef.current = null
-    setIsPdfLoaded(false)
-    setPdfFileName('')
-    setPdfPageNumber(1)
-    setPdfPageCount(0)
+  const resetPdfSlots = () => {
+    setPdfSlots(createInitialPdfSlots())
+    setActivePdfSlotIndex(0)
   }
 
   const handleScoreFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -634,7 +749,7 @@ function App() {
     reader.onload = () => {
       if (typeof reader.result !== 'string') return
 
-      resetPdfState()
+      resetPdfSlots()
       loadScoreImageFromDataUrl(reader.result, file.name)
     }
 
@@ -643,11 +758,13 @@ function App() {
   }
 
   const renderPdfPage = async (
+    slotIndex: number,
     pageNumber: number,
     pdfOverride?: any,
     fileNameOverride?: string,
   ) => {
-    const pdf = pdfOverride ?? pdfDocumentRef.current
+    const slot = pdfSlots[slotIndex]
+    const pdf = pdfOverride ?? slot?.pdf
 
     if (!pdf) return
 
@@ -670,11 +787,19 @@ function App() {
     }).promise
 
     const dataUrl = temporaryCanvas.toDataURL('image/png')
-    const fileName = fileNameOverride ?? pdfFileName
+    const fileName = fileNameOverride ?? slot?.fileName ?? 'PDF Score'
 
-    setPdfPageNumber(safePageNumber)
-    setPdfPageCount(totalPages)
-    loadScoreImageFromDataUrl(dataUrl, `${fileName} / page ${safePageNumber}`)
+    updatePdfSlot(slotIndex, {
+      pdf,
+      fileName,
+      pageNumber: safePageNumber,
+      pageCount: totalPages,
+    })
+
+    loadScoreImageFromDataUrl(
+      dataUrl,
+      `Slot ${slotIndex + 1}: ${fileName} / page ${safePageNumber}`,
+    )
   }
 
   const handleScorePdfChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -687,14 +812,14 @@ function App() {
       const arrayBuffer = await file.arrayBuffer()
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
 
-      pdfDocumentRef.current = pdf
+      updatePdfSlot(activePdfSlotIndex, {
+        pdf,
+        fileName: file.name,
+        pageNumber: 1,
+        pageCount: pdf.numPages,
+      })
 
-      setIsPdfLoaded(true)
-      setPdfFileName(file.name)
-      setPdfPageCount(pdf.numPages)
-      setPdfPageNumber(1)
-
-      await renderPdfPage(1, pdf, file.name)
+      await renderPdfPage(activePdfSlotIndex, 1, pdf, file.name)
     } catch (error) {
       console.error('Failed to load PDF score:', error)
     } finally {
@@ -704,18 +829,30 @@ function App() {
 
   const showPreviousPdfPage = () => {
     if (!isPdfLoaded) return
-    void renderPdfPage(pdfPageNumber - 1)
+    void renderPdfPage(activePdfSlotIndex, pdfPageNumber - 1)
   }
 
   const showNextPdfPage = () => {
     if (!isPdfLoaded) return
-    void renderPdfPage(pdfPageNumber + 1)
+    void renderPdfPage(activePdfSlotIndex, pdfPageNumber + 1)
+  }
+
+  const activatePdfSlot = (slotIndex: number) => {
+    setActivePdfSlotIndex(slotIndex)
+
+    const slot = pdfSlots[slotIndex]
+
+    if (!slot?.pdf) {
+      return
+    }
+
+    void renderPdfPage(slotIndex, slot.pageNumber)
   }
 
   const playOscillatorClick = (
     audioContext: AudioContext,
     now: number,
-    isBarHead: boolean,
+    intensity: BeatIntensity,
     sound: ClickSound,
   ) => {
     const oscillator = audioContext.createOscillator()
@@ -733,23 +870,23 @@ function App() {
 
     if (sound === 'Soft Tick') {
       oscillator.type = 'sine'
-      frequency = isBarHead ? 1320 : 880
-      peakGain = isBarHead ? 0.22 : 0.13
+      frequency = intensity === 'High' ? 1320 : intensity === 'Mid' ? 880 : 660
+      peakGain = intensity === 'High' ? 0.22 : intensity === 'Mid' ? 0.13 : 0.09
       duration = 0.055
     }
 
     if (sound === 'Wood') {
       oscillator.type = 'triangle'
-      frequency = isBarHead ? 640 : 430
-      peakGain = isBarHead ? 0.26 : 0.17
+      frequency = intensity === 'High' ? 640 : intensity === 'Mid' ? 430 : 320
+      peakGain = intensity === 'High' ? 0.26 : intensity === 'Mid' ? 0.17 : 0.11
       duration = 0.045
       filterNode.frequency.setValueAtTime(1400, now)
     }
 
     if (sound === 'Metal') {
       oscillator.type = 'square'
-      frequency = isBarHead ? 1760 : 1180
-      peakGain = isBarHead ? 0.18 : 0.11
+      frequency = intensity === 'High' ? 1760 : intensity === 'Mid' ? 1180 : 880
+      peakGain = intensity === 'High' ? 0.18 : intensity === 'Mid' ? 0.11 : 0.07
       duration = 0.04
       filterNode.frequency.setValueAtTime(3800, now)
       filterNode.Q.setValueAtTime(1.8, now)
@@ -757,8 +894,8 @@ function App() {
 
     if (sound === 'Muted Key') {
       oscillator.type = 'triangle'
-      frequency = isBarHead ? 880 : 660
-      peakGain = isBarHead ? 0.2 : 0.13
+      frequency = intensity === 'High' ? 880 : intensity === 'Mid' ? 660 : 440
+      peakGain = intensity === 'High' ? 0.2 : intensity === 'Mid' ? 0.13 : 0.09
       duration = 0.075
       filterNode.frequency.setValueAtTime(1800, now)
     }
@@ -768,10 +905,7 @@ function App() {
     oscillator.frequency.setValueAtTime(frequency, now)
 
     gainNode.gain.setValueAtTime(0.0001, now)
-    gainNode.gain.exponentialRampToValueAtTime(
-      adjustedPeakGain,
-      now + 0.006,
-    )
+    gainNode.gain.exponentialRampToValueAtTime(adjustedPeakGain, now + 0.006)
     gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration)
 
     oscillator.connect(filterNode)
@@ -785,7 +919,7 @@ function App() {
   const playBreathClick = (
     audioContext: AudioContext,
     now: number,
-    isBarHead: boolean,
+    intensity: BeatIntensity,
   ) => {
     const source = audioContext.createBufferSource()
     const highPassNode = audioContext.createBiquadFilter()
@@ -799,10 +933,13 @@ function App() {
     highPassNode.Q.setValueAtTime(0.5, now)
 
     lowPassNode.type = 'lowpass'
-    lowPassNode.frequency.setValueAtTime(isBarHead ? 1450 : 1050, now)
+    lowPassNode.frequency.setValueAtTime(
+      intensity === 'High' ? 1450 : intensity === 'Mid' ? 1050 : 800, 
+      now
+    )
     lowPassNode.Q.setValueAtTime(0.7, now)
 
-    const breathPeakGain = (isBarHead ? 0.085 : 0.055) * volumeRatio
+    const breathPeakGain = (intensity === 'High' ? 0.085 : intensity === 'Mid' ? 0.055 : 0.035) * volumeRatio
 
     gainNode.gain.setValueAtTime(0.0001, now)
     gainNode.gain.linearRampToValueAtTime(
@@ -820,7 +957,7 @@ function App() {
     source.stop(now + 0.22)
   }
 
-  const playClick = async (isBarHead: boolean) => {
+  const playClick = async (intensity: BeatIntensity) => {
     if (!isAudioEnabled) return
     if (volumeRatio <= 0) return
 
@@ -828,11 +965,11 @@ function App() {
     const now = audioContext.currentTime
 
     if (clickSound === 'Breath') {
-      playBreathClick(audioContext, now, isBarHead)
+      playBreathClick(audioContext, now, intensity)
       return
     }
 
-    playOscillatorClick(audioContext, now, isBarHead, clickSound)
+    playOscillatorClick(audioContext, now, intensity, clickSound)
   }
 
   const turnAudioOn = async () => {
@@ -896,6 +1033,8 @@ function App() {
       return
     }
 
+    const eighthClickTimeoutIds: number[] = []
+
     const intervalId = window.setInterval(() => {
       updateDebugMetrics()
       setSmallRippleKey((key) => key + 1)
@@ -908,7 +1047,16 @@ function App() {
           setLargeRippleKey((key) => key + 1)
         }
 
-        void playClick(timeSignature === 'Free' ? false : isBarHead)
+        const currentIntensity: BeatIntensity = timeSignature === 'Free' ? 'Mid' : (isBarHead ? 'High' : 'Mid')
+        void playClick(currentIntensity)
+
+        if (clickSubdivision === 'Eighth') {
+          const timeoutId = window.setTimeout(() => {
+            void playClick('Low')
+          }, (beatDuration * 1000) / 2)
+
+          eighthClickTimeoutIds.push(timeoutId)
+        }
 
         return nextBeat
       })
@@ -916,6 +1064,10 @@ function App() {
 
     return () => {
       window.clearInterval(intervalId)
+
+      eighthClickTimeoutIds.forEach((timeoutId) => {
+        window.clearTimeout(timeoutId)
+      })
     }
   }, [
     isRunning,
@@ -924,6 +1076,7 @@ function App() {
     beatsPerBar,
     timeSignature,
     clickSound,
+    clickSubdivision,
     volumeRatio,
     targetBeatMs,
   ])
@@ -1000,7 +1153,10 @@ function App() {
         onChange={handleScorePdfChange}
       />
 
-      <div className={`background ${isRunning ? 'is-running' : 'is-paused'}`} />
+      <div
+        className={`background ${isRunning ? 'is-running' : 'is-paused'}`}
+        style={backgroundInlineStyle}
+      />
 
       <div
         className="score-overlay"
@@ -1042,7 +1198,6 @@ function App() {
         <div className="secondary-controls">
           <label className="compact-control">
             <span>BPM</span>
-
             <input
               type="number"
               min="30"
@@ -1056,7 +1211,6 @@ function App() {
 
           <label className="compact-control">
             <span>Meter</span>
-
             <select
               value={timeSignature}
               onChange={(event) =>
@@ -1074,7 +1228,6 @@ function App() {
 
           <label className="compact-control sound-control">
             <span>Sound</span>
-
             <select
               value={clickSound}
               onChange={(event) =>
@@ -1092,8 +1245,25 @@ function App() {
           </label>
 
           <label className="compact-control sound-control">
-            <span>Preset</span>
+            <span>Click</span>
+            <select
+              value={clickSubdivision}
+              onChange={(event) =>
+                updateSettings({
+                  clickSubdivision: event.target.value as ClickSubdivision,
+                })
+              }
+            >
+              {clickSubdivisionOptions.map((subdivision) => (
+                <option key={subdivision} value={subdivision}>
+                  {subdivision}
+                </option>
+              ))}
+            </select>
+          </label>
 
+          <label className="compact-control sound-control">
+            <span>Preset</span>
             <select
               value={selectedPreset}
               onChange={(event) =>
@@ -1105,6 +1275,38 @@ function App() {
               {presetOptions.map((preset) => (
                 <option key={preset} value={preset}>
                   {preset}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="compact-control sound-control">
+            <span>Background</span>
+            <select
+              value={backgroundMode}
+              onChange={(event) =>
+                updateSettings({
+                  backgroundMode: event.target.value as BackgroundMode,
+                })
+              }
+            >
+              {backgroundModeOptions.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="compact-control sound-control">
+            <span>PDF Slot</span>
+            <select
+              value={activePdfSlotIndex}
+              onChange={(event) => activatePdfSlot(Number(event.target.value))}
+            >
+              {pdfSlots.map((slot, index) => (
+                <option key={index} value={index}>
+                  {`Slot ${index + 1}${slot.pdf ? ` / ${slot.fileName}` : ''}`}
                 </option>
               ))}
             </select>
@@ -1202,7 +1404,6 @@ function App() {
         <div className="sliders">
           <label className="slider-control">
             <span>Volume</span>
-
             <input
               type="range"
               min="0"
@@ -1214,13 +1415,11 @@ function App() {
                 })
               }
             />
-
             <em>{volume}</em>
           </label>
 
           <label className="slider-control">
             <span>Breath</span>
-
             <input
               type="range"
               min="0"
@@ -1232,13 +1431,11 @@ function App() {
                 })
               }
             />
-
             <em>{breathIntensity}</em>
           </label>
 
           <label className="slider-control">
             <span>Small</span>
-
             <input
               type="range"
               min="0"
@@ -1250,13 +1447,11 @@ function App() {
                 })
               }
             />
-
             <em>{smallRippleIntensity}</em>
           </label>
 
           <label className="slider-control">
             <span>Large</span>
-
             <input
               type="range"
               min="0"
@@ -1268,13 +1463,11 @@ function App() {
                 })
               }
             />
-
             <em>{largeRippleIntensity}</em>
           </label>
 
           <label className="slider-control">
             <span>Score Visibility</span>
-
             <input
               type="range"
               min="0"
@@ -1286,13 +1479,11 @@ function App() {
                 })
               }
             />
-
             <em>{scoreOpacity}</em>
           </label>
 
           <label className="slider-control">
             <span>Score Size</span>
-
             <input
               type="range"
               min="20"
@@ -1304,13 +1495,11 @@ function App() {
                 })
               }
             />
-
             <em>{scoreScale}</em>
           </label>
 
           <label className="slider-control">
             <span>Score X</span>
-
             <input
               type="range"
               min="-400"
@@ -1322,13 +1511,11 @@ function App() {
                 })
               }
             />
-
             <em>{scoreX}</em>
           </label>
 
           <label className="slider-control">
             <span>Score Y</span>
-
             <input
               type="range"
               min="-300"
@@ -1340,13 +1527,11 @@ function App() {
                 })
               }
             />
-
             <em>{scoreY}</em>
           </label>
 
           <label className="slider-control">
             <span>Paper Cut</span>
-
             <input
               type="range"
               min="50"
@@ -1358,13 +1543,11 @@ function App() {
                 })
               }
             />
-
             <em>{scoreWhiteCut}</em>
           </label>
 
           <label className="slider-control">
             <span>Ink Lift</span>
-
             <input
               type="range"
               min="0"
@@ -1376,7 +1559,6 @@ function App() {
                 })
               }
             />
-
             <em>{scoreInkBoost}</em>
           </label>
         </div>
@@ -1386,8 +1568,11 @@ function App() {
         <span>{safeBpm} BPM</span>
         <span>{timeSignature}</span>
         <span>{clickSound}</span>
+        <span>{clickSubdivision}</span>
         <span>VOL {volume}</span>
+        <span>{backgroundMode}</span>
         <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
+        <span>{`Slot ${activePdfSlotIndex + 1}`}</span>
         <span>{scoreImageName}</span>
         <span>
           {isPdfLoaded ? `PDF ${pdfPageNumber}/${pdfPageCount}` : 'PDF --'}
@@ -1406,21 +1591,18 @@ function App() {
         <div className="debug-panel ui-panel">
           <span>Debug</span>
           <span>Target {debugMetrics.targetMs.toFixed(1)}ms</span>
-
           <span>
             Actual{' '}
             {debugMetrics.actualMs === null
               ? '--'
               : `${debugMetrics.actualMs.toFixed(1)}ms`}
           </span>
-
           <span>
             Diff{' '}
             {debugMetrics.diffMs === null
               ? '--'
               : `${debugMetrics.diffMs >= 0 ? '+' : ''}${debugMetrics.diffMs.toFixed(1)}ms`}
           </span>
-
           <span>Max ±{debugMetrics.maxDiffMs.toFixed(1)}ms</span>
           <span>Count {debugMetrics.beatCount}</span>
         </div>
