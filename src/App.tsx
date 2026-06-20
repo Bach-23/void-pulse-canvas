@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent, CSSProperties } from 'react'
 import './App.css'
 
 type TimeSignature = '2/4' | '3/4' | '4/4' | 'Free'
 type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
+
 type PresetName =
   | 'Current'
   | 'Void / Score Float'
@@ -43,7 +45,7 @@ type DebugMetrics = {
 }
 
 const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
-const SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
+const DEFAULT_SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
 
 const defaultPresetValues: PresetValues = {
   bpm: 105,
@@ -94,12 +96,16 @@ const clampNumber = (
 ) => {
   if (typeof value !== 'number') return fallback
   if (Number.isNaN(value)) return fallback
-
   return Math.min(Math.max(value, min), max)
 }
 
 const isTimeSignature = (value: unknown): value is TimeSignature => {
-  return value === '2/4' || value === '3/4' || value === '4/4' || value === 'Free'
+  return (
+    value === '2/4' ||
+    value === '3/4' ||
+    value === '4/4' ||
+    value === 'Free'
+  )
 }
 
 const isClickSound = (value: unknown): value is ClickSound => {
@@ -204,6 +210,7 @@ function loadSettings(): SavedSettings {
     }
 
     const parsed = JSON.parse(raw) as Partial<SavedSettings>
+
     const normalizedPresetValues = normalizePresetValues(
       parsed,
       defaultPresetValues,
@@ -242,7 +249,12 @@ function App() {
   const [smallRippleKey, setSmallRippleKey] = useState(0)
   const [largeRippleKey, setLargeRippleKey] = useState(0)
   const [isUiVisible, setIsUiVisible] = useState(true)
+
   const [isScoreImageLoaded, setIsScoreImageLoaded] = useState(false)
+  const [scoreImageSource, setScoreImageSource] = useState(
+    DEFAULT_SCORE_IMAGE_SRC,
+  )
+  const [scoreImageName, setScoreImageName] = useState('Default Score')
 
   const [debugMetrics, setDebugMetrics] = useState<DebugMetrics>({
     targetMs: 0,
@@ -256,8 +268,10 @@ function App() {
   const lastBeatTimeRef = useRef<number | null>(null)
   const maxDiffRef = useRef(0)
   const beatCountRef = useRef(0)
+
   const scoreCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const scoreImageRef = useRef<HTMLImageElement | null>(null)
+  const scoreFileInputRef = useRef<HTMLInputElement | null>(null)
 
   const {
     bpm,
@@ -319,11 +333,7 @@ function App() {
 
     if (selectedPreset === 'My Saved Preset') {
       if (!savedPreset) return
-
-      updateSettings({
-        ...savedPreset,
-      })
-
+      updateSettings({ ...savedPreset })
       return
     }
 
@@ -344,7 +354,6 @@ function App() {
         scoreWhiteCut: 80,
         scoreInkBoost: 30,
       })
-
       return
     }
 
@@ -365,7 +374,6 @@ function App() {
         scoreWhiteCut: 78,
         scoreInkBoost: 24,
       })
-
       return
     }
 
@@ -386,7 +394,6 @@ function App() {
         scoreWhiteCut: 82,
         scoreInkBoost: 22,
       })
-
       return
     }
 
@@ -583,6 +590,27 @@ function App() {
     context.putImageData(imageData, 0, 0)
   }
 
+  const handleScoreFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+
+    if (!file) return
+    if (!file.type.startsWith('image/')) return
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return
+
+      setScoreImageName(file.name)
+      setIsScoreImageLoaded(false)
+      setScoreImageSource(reader.result)
+      updateSettings({ isScoreVisible: true })
+    }
+
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }
+
   const playOscillatorClick = (
     audioContext: AudioContext,
     now: number,
@@ -721,7 +749,6 @@ function App() {
 
   useEffect(() => {
     const image = new Image()
-    image.src = SCORE_IMAGE_SRC
 
     image.onload = () => {
       scoreImageRef.current = image
@@ -732,16 +759,31 @@ function App() {
       scoreImageRef.current = null
       setIsScoreImageLoaded(false)
     }
-  }, [])
+
+    image.src = scoreImageSource
+  }, [scoreImageSource])
 
   useEffect(() => {
-    if (!isScoreVisible) return
     if (!isScoreImageLoaded) return
 
-    window.requestAnimationFrame(() => {
+    const firstFrameId = window.requestAnimationFrame(() => {
       renderScoreCanvas()
+
+      window.requestAnimationFrame(() => {
+        renderScoreCanvas()
+      })
     })
-  }, [isScoreVisible, isScoreImageLoaded, scoreWhiteCut, scoreInkBoost])
+
+    return () => {
+      window.cancelAnimationFrame(firstFrameId)
+    }
+  }, [
+    isScoreVisible,
+    isScoreImageLoaded,
+    scoreWhiteCut,
+    scoreInkBoost,
+    scoreImageSource,
+  ])
 
   useEffect(() => {
     resetDebugMetrics()
@@ -755,6 +797,7 @@ function App() {
 
     const intervalId = window.setInterval(() => {
       updateDebugMetrics()
+
       setSmallRippleKey((key) => key + 1)
 
       setCurrentBeat((beat) => {
@@ -838,16 +881,27 @@ function App() {
           '--score-scale': scoreScaleRatio,
           '--score-x': `${scoreX}px`,
           '--score-y': `${scoreY}px`,
-        } as React.CSSProperties
+        } as CSSProperties
       }
     >
+      <input
+        ref={scoreFileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        style={{ display: 'none' }}
+        onChange={handleScoreFileChange}
+      />
+
       <div className={`background ${isRunning ? 'is-running' : 'is-paused'}`} />
 
-      {isScoreVisible && (
-        <div className="score-overlay">
-          <canvas ref={scoreCanvasRef} />
-        </div>
-      )}
+      <div
+        className="score-overlay"
+        style={{
+          opacity: isScoreVisible ? undefined : 0,
+        }}
+      >
+        <canvas ref={scoreCanvasRef} />
+      </div>
 
       {isRunning && (
         <>
@@ -997,6 +1051,13 @@ function App() {
               onClick={() => updateSettings({ isScoreVisible: false })}
             >
               Score OFF
+            </button>
+
+            <button
+              className="score-switch"
+              onClick={() => scoreFileInputRef.current?.click()}
+            >
+              Load PNG
             </button>
           </div>
         </div>
@@ -1170,6 +1231,7 @@ function App() {
         <span>{clickSound}</span>
         <span>VOL {volume}</span>
         <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
+        <span>{scoreImageName}</span>
         <span>{selectedPreset}</span>
         <span>
           {timeSignature === 'Free'
