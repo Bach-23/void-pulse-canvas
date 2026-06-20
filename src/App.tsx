@@ -3,8 +3,15 @@ import './App.css'
 
 type TimeSignature = '2/4' | '3/4' | '4/4' | 'Free'
 type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
+type PresetName =
+  | 'Current'
+  | 'Void / Score Float'
+  | 'Void / Practice'
+  | 'Void / Recording'
+  | 'Void / Night'
+  | 'My Saved Preset'
 
-type SavedSettings = {
+type PresetValues = {
   bpm: number
   timeSignature: TimeSignature
   breathIntensity: number
@@ -12,7 +19,6 @@ type SavedSettings = {
   largeRippleIntensity: number
   clickSound: ClickSound
   volume: number
-  isDebugEnabled: boolean
   isScoreVisible: boolean
   scoreOpacity: number
   scoreScale: number
@@ -20,6 +26,12 @@ type SavedSettings = {
   scoreY: number
   scoreWhiteCut: number
   scoreInkBoost: number
+}
+
+type SavedSettings = PresetValues & {
+  isDebugEnabled: boolean
+  selectedPreset: PresetName
+  savedPreset: PresetValues | null
 }
 
 type DebugMetrics = {
@@ -33,7 +45,7 @@ type DebugMetrics = {
 const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
 const SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
 
-const defaultSettings: SavedSettings = {
+const defaultPresetValues: PresetValues = {
   bpm: 105,
   timeSignature: '4/4',
   breathIntensity: 40,
@@ -41,7 +53,6 @@ const defaultSettings: SavedSettings = {
   largeRippleIntensity: 40,
   clickSound: 'Soft Tick',
   volume: 70,
-  isDebugEnabled: false,
   isScoreVisible: false,
   scoreOpacity: 70,
   scoreScale: 72,
@@ -51,12 +62,28 @@ const defaultSettings: SavedSettings = {
   scoreInkBoost: 30,
 }
 
+const defaultSettings: SavedSettings = {
+  ...defaultPresetValues,
+  isDebugEnabled: false,
+  selectedPreset: 'Current',
+  savedPreset: null,
+}
+
 const clickSoundOptions: ClickSound[] = [
   'Soft Tick',
   'Wood',
   'Metal',
   'Breath',
   'Muted Key',
+]
+
+const presetOptions: PresetName[] = [
+  'Current',
+  'Void / Score Float',
+  'Void / Practice',
+  'Void / Recording',
+  'Void / Night',
+  'My Saved Preset',
 ]
 
 const clampNumber = (
@@ -71,6 +98,103 @@ const clampNumber = (
   return Math.min(Math.max(value, min), max)
 }
 
+const isTimeSignature = (value: unknown): value is TimeSignature => {
+  return value === '2/4' || value === '3/4' || value === '4/4' || value === 'Free'
+}
+
+const isClickSound = (value: unknown): value is ClickSound => {
+  return (
+    value === 'Soft Tick' ||
+    value === 'Wood' ||
+    value === 'Metal' ||
+    value === 'Breath' ||
+    value === 'Muted Key'
+  )
+}
+
+const isPresetName = (value: unknown): value is PresetName => {
+  return (
+    value === 'Current' ||
+    value === 'Void / Score Float' ||
+    value === 'Void / Practice' ||
+    value === 'Void / Recording' ||
+    value === 'Void / Night' ||
+    value === 'My Saved Preset'
+  )
+}
+
+const normalizePresetValues = (
+  value: Partial<PresetValues> | null | undefined,
+  fallback: PresetValues,
+): PresetValues => {
+  return {
+    bpm: clampNumber(value?.bpm, 30, 240, fallback.bpm),
+
+    timeSignature: isTimeSignature(value?.timeSignature)
+      ? value.timeSignature
+      : fallback.timeSignature,
+
+    breathIntensity: clampNumber(
+      value?.breathIntensity,
+      0,
+      100,
+      fallback.breathIntensity,
+    ),
+
+    smallRippleIntensity: clampNumber(
+      value?.smallRippleIntensity,
+      0,
+      100,
+      fallback.smallRippleIntensity,
+    ),
+
+    largeRippleIntensity: clampNumber(
+      value?.largeRippleIntensity,
+      0,
+      100,
+      fallback.largeRippleIntensity,
+    ),
+
+    clickSound: isClickSound(value?.clickSound)
+      ? value.clickSound
+      : fallback.clickSound,
+
+    volume: clampNumber(value?.volume, 0, 100, fallback.volume),
+
+    isScoreVisible:
+      typeof value?.isScoreVisible === 'boolean'
+        ? value.isScoreVisible
+        : fallback.isScoreVisible,
+
+    scoreOpacity: clampNumber(
+      value?.scoreOpacity,
+      0,
+      100,
+      fallback.scoreOpacity,
+    ),
+
+    scoreScale: clampNumber(value?.scoreScale, 20, 160, fallback.scoreScale),
+
+    scoreX: clampNumber(value?.scoreX, -400, 400, fallback.scoreX),
+
+    scoreY: clampNumber(value?.scoreY, -300, 300, fallback.scoreY),
+
+    scoreWhiteCut: clampNumber(
+      value?.scoreWhiteCut,
+      50,
+      95,
+      fallback.scoreWhiteCut,
+    ),
+
+    scoreInkBoost: clampNumber(
+      value?.scoreInkBoost,
+      0,
+      60,
+      fallback.scoreInkBoost,
+    ),
+  }
+}
+
 function loadSettings(): SavedSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -80,91 +204,29 @@ function loadSettings(): SavedSettings {
     }
 
     const parsed = JSON.parse(raw) as Partial<SavedSettings>
+    const normalizedPresetValues = normalizePresetValues(
+      parsed,
+      defaultPresetValues,
+    )
+
+    const savedPreset =
+      parsed.savedPreset && typeof parsed.savedPreset === 'object'
+        ? normalizePresetValues(parsed.savedPreset, defaultPresetValues)
+        : null
 
     return {
-      bpm: clampNumber(parsed.bpm, 30, 240, defaultSettings.bpm),
-
-      timeSignature:
-        parsed.timeSignature === '2/4' ||
-        parsed.timeSignature === '3/4' ||
-        parsed.timeSignature === '4/4' ||
-        parsed.timeSignature === 'Free'
-          ? parsed.timeSignature
-          : defaultSettings.timeSignature,
-
-      breathIntensity: clampNumber(
-        parsed.breathIntensity,
-        0,
-        100,
-        defaultSettings.breathIntensity,
-      ),
-
-      smallRippleIntensity: clampNumber(
-        parsed.smallRippleIntensity,
-        0,
-        100,
-        defaultSettings.smallRippleIntensity,
-      ),
-
-      largeRippleIntensity: clampNumber(
-        parsed.largeRippleIntensity,
-        0,
-        100,
-        defaultSettings.largeRippleIntensity,
-      ),
-
-      clickSound:
-        parsed.clickSound === 'Soft Tick' ||
-        parsed.clickSound === 'Wood' ||
-        parsed.clickSound === 'Metal' ||
-        parsed.clickSound === 'Breath' ||
-        parsed.clickSound === 'Muted Key'
-          ? parsed.clickSound
-          : defaultSettings.clickSound,
-
-      volume: clampNumber(parsed.volume, 0, 100, defaultSettings.volume),
+      ...normalizedPresetValues,
 
       isDebugEnabled:
         typeof parsed.isDebugEnabled === 'boolean'
           ? parsed.isDebugEnabled
           : defaultSettings.isDebugEnabled,
 
-      isScoreVisible:
-        typeof parsed.isScoreVisible === 'boolean'
-          ? parsed.isScoreVisible
-          : defaultSettings.isScoreVisible,
+      selectedPreset: isPresetName(parsed.selectedPreset)
+        ? parsed.selectedPreset
+        : defaultSettings.selectedPreset,
 
-      scoreOpacity: clampNumber(
-        parsed.scoreOpacity,
-        0,
-        100,
-        defaultSettings.scoreOpacity,
-      ),
-
-      scoreScale: clampNumber(
-        parsed.scoreScale,
-        20,
-        160,
-        defaultSettings.scoreScale,
-      ),
-
-      scoreX: clampNumber(parsed.scoreX, -400, 400, defaultSettings.scoreX),
-
-      scoreY: clampNumber(parsed.scoreY, -300, 300, defaultSettings.scoreY),
-
-      scoreWhiteCut: clampNumber(
-        parsed.scoreWhiteCut,
-        50,
-        95,
-        defaultSettings.scoreWhiteCut,
-      ),
-
-      scoreInkBoost: clampNumber(
-        parsed.scoreInkBoost,
-        0,
-        60,
-        defaultSettings.scoreInkBoost,
-      ),
+      savedPreset,
     }
   } catch {
     return defaultSettings
@@ -213,6 +275,8 @@ function App() {
     scoreY,
     scoreWhiteCut,
     scoreInkBoost,
+    selectedPreset,
+    savedPreset,
   } = settings
 
   const updateSettings = (nextSettings: Partial<SavedSettings>) => {
@@ -220,6 +284,130 @@ function App() {
       ...currentSettings,
       ...nextSettings,
     }))
+  }
+
+  const getCurrentPresetValues = (): PresetValues => {
+    return {
+      bpm,
+      timeSignature,
+      breathIntensity,
+      smallRippleIntensity,
+      largeRippleIntensity,
+      clickSound,
+      volume,
+      isScoreVisible,
+      scoreOpacity,
+      scoreScale,
+      scoreX,
+      scoreY,
+      scoreWhiteCut,
+      scoreInkBoost,
+    }
+  }
+
+  const saveCurrentPreset = () => {
+    updateSettings({
+      savedPreset: getCurrentPresetValues(),
+      selectedPreset: 'My Saved Preset',
+    })
+  }
+
+  const applyPreset = () => {
+    if (selectedPreset === 'Current') {
+      return
+    }
+
+    if (selectedPreset === 'My Saved Preset') {
+      if (!savedPreset) return
+
+      updateSettings({
+        ...savedPreset,
+      })
+
+      return
+    }
+
+    if (selectedPreset === 'Void / Score Float') {
+      updateSettings({
+        bpm: 105,
+        timeSignature: '4/4',
+        breathIntensity: 40,
+        smallRippleIntensity: 100,
+        largeRippleIntensity: 40,
+        clickSound: 'Muted Key',
+        volume: 70,
+        isScoreVisible: true,
+        scoreOpacity: 70,
+        scoreScale: 72,
+        scoreX: 0,
+        scoreY: 0,
+        scoreWhiteCut: 80,
+        scoreInkBoost: 30,
+      })
+
+      return
+    }
+
+    if (selectedPreset === 'Void / Practice') {
+      updateSettings({
+        bpm: 105,
+        timeSignature: '4/4',
+        breathIntensity: 32,
+        smallRippleIntensity: 100,
+        largeRippleIntensity: 36,
+        clickSound: 'Soft Tick',
+        volume: 72,
+        isScoreVisible: true,
+        scoreOpacity: 82,
+        scoreScale: 78,
+        scoreX: 0,
+        scoreY: 0,
+        scoreWhiteCut: 78,
+        scoreInkBoost: 24,
+      })
+
+      return
+    }
+
+    if (selectedPreset === 'Void / Recording') {
+      updateSettings({
+        bpm: 105,
+        timeSignature: '4/4',
+        breathIntensity: 28,
+        smallRippleIntensity: 72,
+        largeRippleIntensity: 32,
+        clickSound: 'Muted Key',
+        volume: 48,
+        isScoreVisible: true,
+        scoreOpacity: 58,
+        scoreScale: 70,
+        scoreX: 0,
+        scoreY: 0,
+        scoreWhiteCut: 82,
+        scoreInkBoost: 22,
+      })
+
+      return
+    }
+
+    if (selectedPreset === 'Void / Night') {
+      updateSettings({
+        bpm: 105,
+        timeSignature: 'Free',
+        breathIntensity: 58,
+        smallRippleIntensity: 76,
+        largeRippleIntensity: 30,
+        clickSound: 'Breath',
+        volume: 54,
+        isScoreVisible: true,
+        scoreOpacity: 46,
+        scoreScale: 68,
+        scoreX: 0,
+        scoreY: 0,
+        scoreWhiteCut: 84,
+        scoreInkBoost: 18,
+      })
+    }
   }
 
   const beatsPerBar = useMemo(() => {
@@ -736,6 +924,34 @@ function App() {
             </select>
           </label>
 
+          <label className="compact-control sound-control">
+            <span>Preset</span>
+            <select
+              value={selectedPreset}
+              onChange={(event) =>
+                updateSettings({
+                  selectedPreset: event.target.value as PresetName,
+                })
+              }
+            >
+              {presetOptions.map((preset) => (
+                <option key={preset} value={preset}>
+                  {preset}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="score-switch-group">
+            <button className="score-switch" onClick={applyPreset}>
+              Apply
+            </button>
+
+            <button className="score-switch" onClick={saveCurrentPreset}>
+              Save Current
+            </button>
+          </div>
+
           <div className="audio-switch-group">
             <button
               className={`audio-switch ${isAudioEnabled ? 'is-active' : ''}`}
@@ -954,6 +1170,7 @@ function App() {
         <span>{clickSound}</span>
         <span>VOL {volume}</span>
         <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
+        <span>{selectedPreset}</span>
         <span>
           {timeSignature === 'Free'
             ? 'No Meter'
