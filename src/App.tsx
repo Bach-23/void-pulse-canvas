@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, CSSProperties } from 'react'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 import './App.css'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 type TimeSignature = '2/4' | '3/4' | '4/4' | 'Free'
 type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
@@ -96,6 +100,7 @@ const clampNumber = (
 ) => {
   if (typeof value !== 'number') return fallback
   if (Number.isNaN(value)) return fallback
+
   return Math.min(Math.max(value, min), max)
 }
 
@@ -256,6 +261,11 @@ function App() {
   )
   const [scoreImageName, setScoreImageName] = useState('Default Score')
 
+  const [isPdfLoaded, setIsPdfLoaded] = useState(false)
+  const [pdfFileName, setPdfFileName] = useState('')
+  const [pdfPageNumber, setPdfPageNumber] = useState(1)
+  const [pdfPageCount, setPdfPageCount] = useState(0)
+
   const [debugMetrics, setDebugMetrics] = useState<DebugMetrics>({
     targetMs: 0,
     actualMs: null,
@@ -272,6 +282,8 @@ function App() {
   const scoreCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const scoreImageRef = useRef<HTMLImageElement | null>(null)
   const scoreFileInputRef = useRef<HTMLInputElement | null>(null)
+  const scorePdfInputRef = useRef<HTMLInputElement | null>(null)
+  const pdfDocumentRef = useRef<any>(null)
 
   const {
     bpm,
@@ -333,6 +345,7 @@ function App() {
 
     if (selectedPreset === 'My Saved Preset') {
       if (!savedPreset) return
+
       updateSettings({ ...savedPreset })
       return
     }
@@ -354,6 +367,7 @@ function App() {
         scoreWhiteCut: 80,
         scoreInkBoost: 30,
       })
+
       return
     }
 
@@ -374,6 +388,7 @@ function App() {
         scoreWhiteCut: 78,
         scoreInkBoost: 24,
       })
+
       return
     }
 
@@ -394,6 +409,7 @@ function App() {
         scoreWhiteCut: 82,
         scoreInkBoost: 22,
       })
+
       return
     }
 
@@ -421,6 +437,7 @@ function App() {
     if (timeSignature === '2/4') return 2
     if (timeSignature === '3/4') return 3
     if (timeSignature === '4/4') return 4
+
     return 1
   }, [timeSignature])
 
@@ -438,6 +455,7 @@ function App() {
 
   const largeRippleDuration = useMemo(() => {
     if (timeSignature === 'Free') return beatDuration
+
     return beatDuration * beatsPerBar
   }, [beatDuration, beatsPerBar, timeSignature])
 
@@ -590,6 +608,21 @@ function App() {
     context.putImageData(imageData, 0, 0)
   }
 
+  const loadScoreImageFromDataUrl = (dataUrl: string, fileName: string) => {
+    setScoreImageName(fileName)
+    setIsScoreImageLoaded(false)
+    setScoreImageSource(dataUrl)
+    updateSettings({ isScoreVisible: true })
+  }
+
+  const resetPdfState = () => {
+    pdfDocumentRef.current = null
+    setIsPdfLoaded(false)
+    setPdfFileName('')
+    setPdfPageNumber(1)
+    setPdfPageCount(0)
+  }
+
   const handleScoreFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
 
@@ -601,14 +634,82 @@ function App() {
     reader.onload = () => {
       if (typeof reader.result !== 'string') return
 
-      setScoreImageName(file.name)
-      setIsScoreImageLoaded(false)
-      setScoreImageSource(reader.result)
-      updateSettings({ isScoreVisible: true })
+      resetPdfState()
+      loadScoreImageFromDataUrl(reader.result, file.name)
     }
 
     reader.readAsDataURL(file)
     event.target.value = ''
+  }
+
+  const renderPdfPage = async (
+    pageNumber: number,
+    pdfOverride?: any,
+    fileNameOverride?: string,
+  ) => {
+    const pdf = pdfOverride ?? pdfDocumentRef.current
+
+    if (!pdf) return
+
+    const totalPages = pdf.numPages
+    const safePageNumber = Math.min(Math.max(pageNumber, 1), totalPages)
+    const page = await pdf.getPage(safePageNumber)
+    const viewport = page.getViewport({ scale: 2 })
+
+    const temporaryCanvas = document.createElement('canvas')
+    const temporaryContext = temporaryCanvas.getContext('2d')
+
+    if (!temporaryContext) return
+
+    temporaryCanvas.width = Math.floor(viewport.width)
+    temporaryCanvas.height = Math.floor(viewport.height)
+
+    await page.render({
+      canvasContext: temporaryContext,
+      viewport,
+    }).promise
+
+    const dataUrl = temporaryCanvas.toDataURL('image/png')
+    const fileName = fileNameOverride ?? pdfFileName
+
+    setPdfPageNumber(safePageNumber)
+    setPdfPageCount(totalPages)
+    loadScoreImageFromDataUrl(dataUrl, `${fileName} / page ${safePageNumber}`)
+  }
+
+  const handleScorePdfChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+
+    if (!file) return
+    if (file.type !== 'application/pdf') return
+
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+
+      pdfDocumentRef.current = pdf
+
+      setIsPdfLoaded(true)
+      setPdfFileName(file.name)
+      setPdfPageCount(pdf.numPages)
+      setPdfPageNumber(1)
+
+      await renderPdfPage(1, pdf, file.name)
+    } catch (error) {
+      console.error('Failed to load PDF score:', error)
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const showPreviousPdfPage = () => {
+    if (!isPdfLoaded) return
+    void renderPdfPage(pdfPageNumber - 1)
+  }
+
+  const showNextPdfPage = () => {
+    if (!isPdfLoaded) return
+    void renderPdfPage(pdfPageNumber + 1)
   }
 
   const playOscillatorClick = (
@@ -797,7 +898,6 @@ function App() {
 
     const intervalId = window.setInterval(() => {
       updateDebugMetrics()
-
       setSmallRippleKey((key) => key + 1)
 
       setCurrentBeat((beat) => {
@@ -892,6 +992,14 @@ function App() {
         onChange={handleScoreFileChange}
       />
 
+      <input
+        ref={scorePdfInputRef}
+        type="file"
+        accept="application/pdf"
+        style={{ display: 'none' }}
+        onChange={handleScorePdfChange}
+      />
+
       <div className={`background ${isRunning ? 'is-running' : 'is-paused'}`} />
 
       <div
@@ -915,7 +1023,9 @@ function App() {
 
       <section className="hero ui-panel">
         <p className="eyebrow">Project2026 / Void</p>
+
         <h1>Void Pulse Canvas</h1>
+
         <p className="subtitle">
           音を出す前に、空間をチューニングする。
         </p>
@@ -932,6 +1042,7 @@ function App() {
         <div className="secondary-controls">
           <label className="compact-control">
             <span>BPM</span>
+
             <input
               type="number"
               min="30"
@@ -945,6 +1056,7 @@ function App() {
 
           <label className="compact-control">
             <span>Meter</span>
+
             <select
               value={timeSignature}
               onChange={(event) =>
@@ -962,6 +1074,7 @@ function App() {
 
           <label className="compact-control sound-control">
             <span>Sound</span>
+
             <select
               value={clickSound}
               onChange={(event) =>
@@ -980,6 +1093,7 @@ function App() {
 
           <label className="compact-control sound-control">
             <span>Preset</span>
+
             <select
               value={selectedPreset}
               onChange={(event) =>
@@ -1059,12 +1173,36 @@ function App() {
             >
               Load PNG
             </button>
+
+            <button
+              className="score-switch"
+              onClick={() => scorePdfInputRef.current?.click()}
+            >
+              Load PDF
+            </button>
+
+            <button
+              className="score-switch"
+              disabled={!isPdfLoaded || pdfPageNumber <= 1}
+              onClick={showPreviousPdfPage}
+            >
+              PDF Prev
+            </button>
+
+            <button
+              className="score-switch"
+              disabled={!isPdfLoaded || pdfPageNumber >= pdfPageCount}
+              onClick={showNextPdfPage}
+            >
+              PDF Next
+            </button>
           </div>
         </div>
 
         <div className="sliders">
           <label className="slider-control">
             <span>Volume</span>
+
             <input
               type="range"
               min="0"
@@ -1076,11 +1214,13 @@ function App() {
                 })
               }
             />
+
             <em>{volume}</em>
           </label>
 
           <label className="slider-control">
             <span>Breath</span>
+
             <input
               type="range"
               min="0"
@@ -1092,11 +1232,13 @@ function App() {
                 })
               }
             />
+
             <em>{breathIntensity}</em>
           </label>
 
           <label className="slider-control">
             <span>Small</span>
+
             <input
               type="range"
               min="0"
@@ -1108,11 +1250,13 @@ function App() {
                 })
               }
             />
+
             <em>{smallRippleIntensity}</em>
           </label>
 
           <label className="slider-control">
             <span>Large</span>
+
             <input
               type="range"
               min="0"
@@ -1124,11 +1268,13 @@ function App() {
                 })
               }
             />
+
             <em>{largeRippleIntensity}</em>
           </label>
 
           <label className="slider-control">
             <span>Score Visibility</span>
+
             <input
               type="range"
               min="0"
@@ -1140,11 +1286,13 @@ function App() {
                 })
               }
             />
+
             <em>{scoreOpacity}</em>
           </label>
 
           <label className="slider-control">
             <span>Score Size</span>
+
             <input
               type="range"
               min="20"
@@ -1156,11 +1304,13 @@ function App() {
                 })
               }
             />
+
             <em>{scoreScale}</em>
           </label>
 
           <label className="slider-control">
             <span>Score X</span>
+
             <input
               type="range"
               min="-400"
@@ -1172,11 +1322,13 @@ function App() {
                 })
               }
             />
+
             <em>{scoreX}</em>
           </label>
 
           <label className="slider-control">
             <span>Score Y</span>
+
             <input
               type="range"
               min="-300"
@@ -1188,11 +1340,13 @@ function App() {
                 })
               }
             />
+
             <em>{scoreY}</em>
           </label>
 
           <label className="slider-control">
             <span>Paper Cut</span>
+
             <input
               type="range"
               min="50"
@@ -1204,11 +1358,13 @@ function App() {
                 })
               }
             />
+
             <em>{scoreWhiteCut}</em>
           </label>
 
           <label className="slider-control">
             <span>Ink Lift</span>
+
             <input
               type="range"
               min="0"
@@ -1220,6 +1376,7 @@ function App() {
                 })
               }
             />
+
             <em>{scoreInkBoost}</em>
           </label>
         </div>
@@ -1232,6 +1389,9 @@ function App() {
         <span>VOL {volume}</span>
         <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
         <span>{scoreImageName}</span>
+        <span>
+          {isPdfLoaded ? `PDF ${pdfPageNumber}/${pdfPageCount}` : 'PDF --'}
+        </span>
         <span>{selectedPreset}</span>
         <span>
           {timeSignature === 'Free'
@@ -1246,18 +1406,21 @@ function App() {
         <div className="debug-panel ui-panel">
           <span>Debug</span>
           <span>Target {debugMetrics.targetMs.toFixed(1)}ms</span>
+
           <span>
             Actual{' '}
             {debugMetrics.actualMs === null
               ? '--'
               : `${debugMetrics.actualMs.toFixed(1)}ms`}
           </span>
+
           <span>
             Diff{' '}
             {debugMetrics.diffMs === null
               ? '--'
               : `${debugMetrics.diffMs >= 0 ? '+' : ''}${debugMetrics.diffMs.toFixed(1)}ms`}
           </span>
+
           <span>Max ±{debugMetrics.maxDiffMs.toFixed(1)}ms</span>
           <span>Count {debugMetrics.beatCount}</span>
         </div>
