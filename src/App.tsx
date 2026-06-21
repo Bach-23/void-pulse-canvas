@@ -866,15 +866,20 @@ function App() {
   useEffect(() => {
     if (!isRunning) {
       lastBeatTimeRef.current = null
+    } else {
+      setCurrentBeat(0)
+      setSmallRippleKey((key) => key + 1)
+      setLargeRippleKey((key) => key + 1)
+      setGhosts([])
     }
   }, [isRunning])
 
   useEffect(() => {
-    setCurrentBeat(0)
-    setSmallRippleKey((key) => key + 1)
-
     if (timeSignature !== 'Free') {
+      setCurrentBeat(0)
+      setSmallRippleKey((key) => key + 1)
       setLargeRippleKey((key) => key + 1)
+      setGhosts([])
     }
   }, [timeSignature, bpm])
 
@@ -916,7 +921,7 @@ function App() {
 
     setGhosts((prev) => {
       const next = [...prev, { id: smallRippleKey, left: leftPos, isBar }]
-      return next.slice(-10)
+      return next.slice(-8)
     })
   }, [smallRippleKey, visualEffect, isRunning, currentBeat, beatsPerBar, timeSignature])
 
@@ -943,12 +948,30 @@ function App() {
           100% { left: 100%; }
         }
         @keyframes ghost-fade {
-          0% { opacity: 0.6; filter: drop-shadow(0 0 2px rgba(220, 230, 255, 0.4)); }
-          100% { opacity: 0; filter: drop-shadow(0 0 0px transparent); }
+          0% { 
+            opacity: 1; 
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 0 10px rgba(220, 230, 255, 0.8); 
+          }
+          100% { 
+            opacity: 0; 
+            background: rgba(200, 220, 255, 0.3);
+            box-shadow: 0 0 0px transparent; 
+          }
         }
         @keyframes ghost-fade-bar {
-          0% { opacity: 0.8; width: 2px; filter: drop-shadow(0 0 4px rgba(220, 230, 255, 0.6)); }
-          100% { opacity: 0; width: 2px; filter: drop-shadow(0 0 0px transparent); }
+          0% { 
+            opacity: 1; 
+            width: 2px; 
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 0 15px rgba(220, 230, 255, 1); 
+          }
+          100% { 
+            opacity: 0; 
+            width: 2px; 
+            background: rgba(200, 220, 255, 0.4);
+            box-shadow: 0 0 0px transparent; 
+          }
         }
         .sweep-container {
           position: absolute;
@@ -965,8 +988,15 @@ function App() {
           position: absolute;
           top: 0;
           bottom: 0;
-          width: 1px;
-          background: rgba(200, 220, 255, 0.15);
+          width: 2px;
+          background: linear-gradient(
+            to right,
+            transparent,
+            rgba(200, 220, 255, 0.25),
+            rgba(200, 220, 255, 0.45),
+            rgba(200, 220, 255, 0.25),
+            transparent
+          );
           transform: translateX(-50%);
         }
         .ghost-line {
@@ -974,8 +1004,6 @@ function App() {
           top: 0;
           bottom: 0;
           width: 1px;
-          background: rgba(200, 220, 255, 0.3);
-          opacity: 0;
           transform: translateX(-50%);
         }
       `}</style>
@@ -1036,8 +1064,8 @@ function App() {
               style={{
                 left: `${g.left}%`,
                 animation: g.isBar
-                  ? 'ghost-fade-bar 1.2s cubic-bezier(0.1, 0.9, 0.2, 1) forwards'
-                  : 'ghost-fade 0.8s cubic-bezier(0.1, 0.9, 0.2, 1) forwards'
+                  ? 'ghost-fade-bar 2.0s ease-out forwards'
+                  : 'ghost-fade 1.5s ease-out forwards'
               }}
             />
           ))}
