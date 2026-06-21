@@ -1,70 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, CSSProperties } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
+import { useAudioPulse } from './hooks/useAudioPulse'
+import type {
+  TimeSignature,
+  ClickSound,
+  ClickSubdivision,
+  BackgroundMode,
+  PresetName,
+  PresetValues,
+  SavedSettings,
+  DebugMetrics,
+  PdfSlot,
+} from './types'
 import './App.css'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
-
-type TimeSignature = '2/4' | '3/4' | '4/4' | 'Free'
-type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
-type ClickSubdivision = 'Quarter' | 'Eighth'
-type BeatIntensity = 'High' | 'Mid' | 'Low'
-
-type BackgroundMode =
-  | 'Image'
-  | 'Void Black'
-  | 'Warm Gray'
-  | 'Deep Blue'
-  | 'Paper Dark'
-
-type PresetName =
-  | 'Current'
-  | 'Void / Score Float'
-  | 'Void / Practice'
-  | 'Void / Recording'
-  | 'Void / Night'
-  | 'My Saved Preset'
-
-type PresetValues = {
-  bpm: number
-  timeSignature: TimeSignature
-  breathIntensity: number
-  smallRippleIntensity: number
-  largeRippleIntensity: number
-  clickSound: ClickSound
-  clickSubdivision: ClickSubdivision
-  volume: number
-  isScoreVisible: boolean
-  scoreOpacity: number
-  scoreScale: number
-  scoreX: number
-  scoreY: number
-  scoreWhiteCut: number
-  scoreInkBoost: number
-  backgroundMode: BackgroundMode
-}
-
-type SavedSettings = PresetValues & {
-  isDebugEnabled: boolean
-  selectedPreset: PresetName
-  savedPreset: PresetValues | null
-}
-
-type DebugMetrics = {
-  targetMs: number
-  actualMs: number | null
-  diffMs: number | null
-  maxDiffMs: number
-  beatCount: number
-}
-
-type PdfSlot = {
-  pdf: any | null
-  fileName: string
-  pageNumber: number
-  pageCount: number
-}
 
 const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
 const DEFAULT_SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
@@ -336,7 +288,6 @@ function App() {
     beatCount: 0,
   })
 
-  const audioContextRef = useRef<AudioContext | null>(null)
   const lastBeatTimeRef = useRef<number | null>(null)
   const maxDiffRef = useRef(0)
   const beatCountRef = useRef(0)
@@ -589,18 +540,6 @@ function App() {
     }
   }, [backgroundMode])
 
-  const ensureAudioContext = async () => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext()
-    }
-
-    if (audioContextRef.current.state === 'suspended') {
-      await audioContextRef.current.resume()
-    }
-
-    return audioContextRef.current
-  }
-
   const resetDebugMetrics = () => {
     lastBeatTimeRef.current = null
     maxDiffRef.current = 0
@@ -615,7 +554,7 @@ function App() {
     })
   }
 
-  const updateDebugMetrics = () => {
+  const updateDebugMetrics = useCallback(() => {
     const now = performance.now()
     const previousBeatTime = lastBeatTimeRef.current
 
@@ -649,21 +588,31 @@ function App() {
       maxDiffMs: maxDiffRef.current,
       beatCount: beatCountRef.current,
     })
+  }, [targetBeatMs])
+
+  const { ensureAudioContext } = useAudioPulse({
+    isRunning,
+    isAudioEnabled,
+    beatDuration,
+    beatsPerBar,
+    timeSignature,
+    clickSound,
+    clickSubdivision,
+    volumeRatio,
+    targetBeatMs,
+    updateDebugMetrics,
+    setSmallRippleKey,
+    setCurrentBeat,
+    setLargeRippleKey,
+  })
+
+  const turnAudioOn = async () => {
+    await ensureAudioContext()
+    setIsAudioEnabled(true)
   }
 
-  const createNoiseBuffer = (audioContext: AudioContext, duration: number) => {
-    const sampleRate = audioContext.sampleRate
-    const frameCount = Math.floor(sampleRate * duration)
-    const buffer = audioContext.createBuffer(1, frameCount, sampleRate)
-    const channelData = buffer.getChannelData(0)
-
-    for (let index = 0; index < frameCount; index += 1) {
-      const whiteNoise = Math.random() * 2 - 1
-      const fadeOut = 1 - index / frameCount
-      channelData[index] = whiteNoise * fadeOut
-    }
-
-    return buffer
+  const turnAudioOff = () => {
+    setIsAudioEnabled(false)
   }
 
   const renderScoreCanvas = () => {
@@ -849,138 +798,6 @@ function App() {
     void renderPdfPage(slotIndex, slot.pageNumber)
   }
 
-  const playOscillatorClick = (
-    audioContext: AudioContext,
-    now: number,
-    intensity: BeatIntensity,
-    sound: ClickSound,
-  ) => {
-    const oscillator = audioContext.createOscillator()
-    const gainNode = audioContext.createGain()
-    const filterNode = audioContext.createBiquadFilter()
-
-    let frequency = 880
-    let peakGain = 0.13
-    let duration = 0.055
-
-    oscillator.type = 'sine'
-    filterNode.type = 'lowpass'
-    filterNode.frequency.setValueAtTime(6000, now)
-    filterNode.Q.setValueAtTime(0.4, now)
-
-    if (sound === 'Soft Tick') {
-      oscillator.type = 'sine'
-      frequency = intensity === 'High' ? 1320 : intensity === 'Mid' ? 880 : 660
-      peakGain = intensity === 'High' ? 0.22 : intensity === 'Mid' ? 0.13 : 0.09
-      duration = 0.055
-    }
-
-    if (sound === 'Wood') {
-      oscillator.type = 'triangle'
-      frequency = intensity === 'High' ? 640 : intensity === 'Mid' ? 430 : 320
-      peakGain = intensity === 'High' ? 0.26 : intensity === 'Mid' ? 0.17 : 0.11
-      duration = 0.045
-      filterNode.frequency.setValueAtTime(1400, now)
-    }
-
-    if (sound === 'Metal') {
-      oscillator.type = 'square'
-      frequency = intensity === 'High' ? 1760 : intensity === 'Mid' ? 1180 : 880
-      peakGain = intensity === 'High' ? 0.18 : intensity === 'Mid' ? 0.11 : 0.07
-      duration = 0.04
-      filterNode.frequency.setValueAtTime(3800, now)
-      filterNode.Q.setValueAtTime(1.8, now)
-    }
-
-    if (sound === 'Muted Key') {
-      oscillator.type = 'triangle'
-      frequency = intensity === 'High' ? 880 : intensity === 'Mid' ? 660 : 440
-      peakGain = intensity === 'High' ? 0.2 : intensity === 'Mid' ? 0.13 : 0.09
-      duration = 0.075
-      filterNode.frequency.setValueAtTime(1800, now)
-    }
-
-    const adjustedPeakGain = Math.max(0.0001, peakGain * volumeRatio)
-
-    oscillator.frequency.setValueAtTime(frequency, now)
-
-    gainNode.gain.setValueAtTime(0.0001, now)
-    gainNode.gain.exponentialRampToValueAtTime(adjustedPeakGain, now + 0.006)
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration)
-
-    oscillator.connect(filterNode)
-    filterNode.connect(gainNode)
-    gainNode.connect(audioContext.destination)
-
-    oscillator.start(now)
-    oscillator.stop(now + duration + 0.01)
-  }
-
-  const playBreathClick = (
-    audioContext: AudioContext,
-    now: number,
-    intensity: BeatIntensity,
-  ) => {
-    const source = audioContext.createBufferSource()
-    const highPassNode = audioContext.createBiquadFilter()
-    const lowPassNode = audioContext.createBiquadFilter()
-    const gainNode = audioContext.createGain()
-
-    source.buffer = createNoiseBuffer(audioContext, 0.22)
-
-    highPassNode.type = 'highpass'
-    highPassNode.frequency.setValueAtTime(260, now)
-    highPassNode.Q.setValueAtTime(0.5, now)
-
-    lowPassNode.type = 'lowpass'
-    lowPassNode.frequency.setValueAtTime(
-      intensity === 'High' ? 1450 : intensity === 'Mid' ? 1050 : 800, 
-      now
-    )
-    lowPassNode.Q.setValueAtTime(0.7, now)
-
-    const breathPeakGain = (intensity === 'High' ? 0.085 : intensity === 'Mid' ? 0.055 : 0.035) * volumeRatio
-
-    gainNode.gain.setValueAtTime(0.0001, now)
-    gainNode.gain.linearRampToValueAtTime(
-      Math.max(0.0001, breathPeakGain),
-      now + 0.045,
-    )
-    gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.18)
-
-    source.connect(highPassNode)
-    highPassNode.connect(lowPassNode)
-    lowPassNode.connect(gainNode)
-    gainNode.connect(audioContext.destination)
-
-    source.start(now)
-    source.stop(now + 0.22)
-  }
-
-  const playClick = async (intensity: BeatIntensity) => {
-    if (!isAudioEnabled) return
-    if (volumeRatio <= 0) return
-
-    const audioContext = await ensureAudioContext()
-    const now = audioContext.currentTime
-
-    if (clickSound === 'Breath') {
-      playBreathClick(audioContext, now, intensity)
-      return
-    }
-
-    playOscillatorClick(audioContext, now, intensity, clickSound)
-  }
-
-  const turnAudioOn = async () => {
-    await ensureAudioContext()
-    setIsAudioEnabled(true)
-  }
-
-  const turnAudioOff = () => {
-    setIsAudioEnabled(false)
-  }
-
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
   }, [settings])
@@ -1030,56 +847,8 @@ function App() {
   useEffect(() => {
     if (!isRunning) {
       lastBeatTimeRef.current = null
-      return
     }
-
-    const eighthClickTimeoutIds: number[] = []
-
-    const intervalId = window.setInterval(() => {
-      updateDebugMetrics()
-      setSmallRippleKey((key) => key + 1)
-
-      setCurrentBeat((beat) => {
-        const nextBeat = (beat + 1) % beatsPerBar
-        const isBarHead = timeSignature !== 'Free' && nextBeat === 0
-
-        if (isBarHead) {
-          setLargeRippleKey((key) => key + 1)
-        }
-
-        const currentIntensity: BeatIntensity = timeSignature === 'Free' ? 'Mid' : (isBarHead ? 'High' : 'Mid')
-        void playClick(currentIntensity)
-
-        if (clickSubdivision === 'Eighth') {
-          const timeoutId = window.setTimeout(() => {
-            void playClick('Low')
-          }, (beatDuration * 1000) / 2)
-
-          eighthClickTimeoutIds.push(timeoutId)
-        }
-
-        return nextBeat
-      })
-    }, beatDuration * 1000)
-
-    return () => {
-      window.clearInterval(intervalId)
-
-      eighthClickTimeoutIds.forEach((timeoutId) => {
-        window.clearTimeout(timeoutId)
-      })
-    }
-  }, [
-    isRunning,
-    isAudioEnabled,
-    beatDuration,
-    beatsPerBar,
-    timeSignature,
-    clickSound,
-    clickSubdivision,
-    volumeRatio,
-    targetBeatMs,
-  ])
+  }, [isRunning])
 
   useEffect(() => {
     setCurrentBeat(0)
