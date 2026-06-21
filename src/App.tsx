@@ -7,6 +7,7 @@ import type {
   TimeSignature,
   ClickSound,
   ClickSubdivision,
+  VisualEffect,
   BackgroundMode,
   PresetName,
   PresetValues,
@@ -30,6 +31,7 @@ const defaultPresetValues: PresetValues = {
   largeRippleIntensity: 40,
   clickSound: 'Soft Tick',
   clickSubdivision: 'Quarter',
+  visualEffect: 'Ripple',
   volume: 70,
   isScoreVisible: false,
   scoreOpacity: 70,
@@ -57,6 +59,7 @@ const clickSoundOptions: ClickSound[] = [
 ]
 
 const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth']
+const visualEffectOptions: VisualEffect[] = ['Ripple', 'Line Sweep', 'None']
 
 const presetOptions: PresetName[] = [
   'Current',
@@ -119,6 +122,10 @@ const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
   return value === 'Quarter' || value === 'Eighth'
 }
 
+const isVisualEffect = (value: unknown): value is VisualEffect => {
+  return value === 'Ripple' || value === 'Line Sweep' || value === 'None'
+}
+
 const isPresetName = (value: unknown): value is PresetName => {
   return (
     value === 'Current' ||
@@ -179,6 +186,10 @@ const normalizePresetValues = (
     clickSubdivision: isClickSubdivision(value?.clickSubdivision)
       ? value.clickSubdivision
       : fallback.clickSubdivision,
+
+    visualEffect: isVisualEffect(value?.visualEffect)
+      ? value.visualEffect
+      : fallback.visualEffect,
 
     volume: clampNumber(value?.volume, 0, 100, fallback.volume),
 
@@ -269,6 +280,8 @@ function App() {
   const [largeRippleKey, setLargeRippleKey] = useState(0)
   const [isUiVisible, setIsUiVisible] = useState(true)
 
+  const [ghosts, setGhosts] = useState<{ id: number; left: number; isBar: boolean }[]>([])
+
   const [isScoreImageLoaded, setIsScoreImageLoaded] = useState(false)
   const [scoreImageSource, setScoreImageSource] = useState(
     DEFAULT_SCORE_IMAGE_SRC,
@@ -305,6 +318,7 @@ function App() {
     largeRippleIntensity,
     clickSound,
     clickSubdivision,
+    visualEffect,
     volume,
     isDebugEnabled,
     isScoreVisible,
@@ -348,6 +362,7 @@ function App() {
       largeRippleIntensity,
       clickSound,
       clickSubdivision,
+      visualEffect,
       volume,
       isScoreVisible,
       scoreOpacity,
@@ -385,6 +400,7 @@ function App() {
         largeRippleIntensity: 40,
         clickSound: 'Muted Key',
         clickSubdivision: 'Quarter',
+        visualEffect: 'Ripple',
         volume: 70,
         isScoreVisible: true,
         scoreOpacity: 70,
@@ -407,6 +423,7 @@ function App() {
         largeRippleIntensity: 36,
         clickSound: 'Soft Tick',
         clickSubdivision: 'Quarter',
+        visualEffect: 'Ripple',
         volume: 72,
         isScoreVisible: true,
         scoreOpacity: 82,
@@ -429,6 +446,7 @@ function App() {
         largeRippleIntensity: 32,
         clickSound: 'Muted Key',
         clickSubdivision: 'Quarter',
+        visualEffect: 'Ripple',
         volume: 48,
         isScoreVisible: true,
         scoreOpacity: 58,
@@ -451,6 +469,7 @@ function App() {
         largeRippleIntensity: 30,
         clickSound: 'Breath',
         clickSubdivision: 'Quarter',
+        visualEffect: 'Ripple',
         volume: 54,
         isScoreVisible: true,
         scoreOpacity: 46,
@@ -889,6 +908,18 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    if (visualEffect !== 'Line Sweep' || !isRunning) return
+
+    const isBar = timeSignature !== 'Free' && currentBeat === 0
+    const leftPos = timeSignature === 'Free' ? 0 : (currentBeat / beatsPerBar) * 100
+
+    setGhosts((prev) => {
+      const next = [...prev, { id: smallRippleKey, left: leftPos, isBar }]
+      return next.slice(-10)
+    })
+  }, [smallRippleKey, visualEffect, isRunning, currentBeat, beatsPerBar, timeSignature])
+
   return (
     <main
       className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'}`}
@@ -906,6 +937,49 @@ function App() {
         } as CSSProperties
       }
     >
+      <style>{`
+        @keyframes sweep-slide {
+          0% { left: 0%; }
+          100% { left: 100%; }
+        }
+        @keyframes ghost-fade {
+          0% { opacity: 0.6; filter: drop-shadow(0 0 2px rgba(220, 230, 255, 0.4)); }
+          100% { opacity: 0; filter: drop-shadow(0 0 0px transparent); }
+        }
+        @keyframes ghost-fade-bar {
+          0% { opacity: 0.8; width: 2px; filter: drop-shadow(0 0 4px rgba(220, 230, 255, 0.6)); }
+          100% { opacity: 0; width: 2px; filter: drop-shadow(0 0 0px transparent); }
+        }
+        .sweep-container {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: 5;
+          overflow: hidden;
+          mix-blend-mode: screen;
+        }
+        .sweep-line {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 1px;
+          background: rgba(200, 220, 255, 0.15);
+          transform: translateX(-50%);
+        }
+        .ghost-line {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 1px;
+          background: rgba(200, 220, 255, 0.3);
+          opacity: 0;
+          transform: translateX(-50%);
+        }
+      `}</style>
+
       <input
         ref={scoreFileInputRef}
         type="file"
@@ -936,7 +1010,7 @@ function App() {
         <canvas ref={scoreCanvasRef} />
       </div>
 
-      {isRunning && (
+      {isRunning && visualEffect === 'Ripple' && (
         <>
           <div key={`small-${smallRippleKey}`} className="small-ripple" />
 
@@ -944,6 +1018,30 @@ function App() {
             <div key={`large-${largeRippleKey}`} className="large-ripple" />
           )}
         </>
+      )}
+
+      {isRunning && visualEffect === 'Line Sweep' && (
+        <div className="sweep-container">
+          <div
+            key={`sweep-${largeRippleKey}`}
+            className="sweep-line"
+            style={{
+              animation: `sweep-slide ${largeRippleDuration}s linear infinite`
+            }}
+          />
+          {ghosts.map((g) => (
+            <div
+              key={g.id}
+              className="ghost-line"
+              style={{
+                left: `${g.left}%`,
+                animation: g.isBar
+                  ? 'ghost-fade-bar 1.2s cubic-bezier(0.1, 0.9, 0.2, 1) forwards'
+                  : 'ghost-fade 0.8s cubic-bezier(0.1, 0.9, 0.2, 1) forwards'
+              }}
+            />
+          ))}
+        </div>
       )}
 
       <section className="hero ui-panel">
@@ -1062,6 +1160,24 @@ function App() {
               {backgroundModeOptions.map((mode) => (
                 <option key={mode} value={mode}>
                   {mode}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="compact-control sound-control">
+            <span>Effect</span>
+            <select
+              value={visualEffect}
+              onChange={(event) =>
+                updateSettings({
+                  visualEffect: event.target.value as VisualEffect,
+                })
+              }
+            >
+              {visualEffectOptions.map((effect) => (
+                <option key={effect} value={effect}>
+                  {effect}
                 </option>
               ))}
             </select>
@@ -1340,6 +1456,7 @@ function App() {
         <span>{clickSubdivision}</span>
         <span>VOL {volume}</span>
         <span>{backgroundMode}</span>
+        <span>{visualEffect}</span>
         <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
         <span>{`Slot ${activePdfSlotIndex + 1}`}</span>
         <span>{scoreImageName}</span>

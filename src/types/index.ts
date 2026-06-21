@@ -2,6 +2,7 @@ export type TimeSignature = '2/4' | '3/4' | '4/4' | 'Free'
 export type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
 export type ClickSubdivision = 'Quarter' | 'Eighth'
 export type BeatIntensity = 'High' | 'Mid' | 'Low'
+export type VisualEffect = 'Ripple' | 'Line Sweep' | 'None'
 
 export type BackgroundMode =
   | 'Image'
@@ -26,6 +27,7 @@ export type PresetValues = {
   largeRippleIntensity: number
   clickSound: ClickSound
   clickSubdivision: ClickSubdivision
+  visualEffect: VisualEffect
   volume: number
   isScoreVisible: boolean
   scoreOpacity: number
@@ -57,4 +59,3 @@ export type PdfSlot = {
   pageNumber: number
   pageCount: number
 }
-``
