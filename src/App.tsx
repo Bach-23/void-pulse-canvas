@@ -413,7 +413,11 @@ function App() {
   const [pdfSlots, setPdfSlots] = useState<PdfSlot[]>(() =>
     createInitialPdfSlots(),
   )
+  // Active PDF slot always starts at 0
   const [activePdfSlotIndex, setActivePdfSlotIndex] = useState(0)
+
+  // Cache to hold ArrayBuffers from IndexedDB, bypassing heavy PDF parsing on load
+  const pdfDataCacheRef = useRef<Map<number, ArrayBuffer>>(new Map())
 
   const [debugMetrics, setDebugMetrics] = useState<DebugMetrics>({
     targetMs: 0,
@@ -846,6 +850,7 @@ function App() {
   const resetPdfSlots = () => {
     setPdfSlots(createInitialPdfSlots())
     setActivePdfSlotIndex(0)
+    pdfDataCacheRef.current.clear()
     clearPdfSlotsFromDB().catch((err) => {
       console.error('Failed to clear PDF slots from DB:', err)
     })
@@ -935,7 +940,7 @@ function App() {
 
     try {
       const arrayBuffer = await file.arrayBuffer()
-      const bufferForDb = arrayBuffer.slice(0) // Copy buffer to prevent transfer detachment issues
+      const bufferForDb = arrayBuffer.slice(0)
 
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
 
@@ -946,9 +951,10 @@ function App() {
         pageCount: pdf.numPages,
       })
 
+      pdfDataCacheRef.current.set(activePdfSlotIndex, bufferForDb.slice(0))
+
       await renderPdfPage(activePdfSlotIndex, 1, pdf, file.name)
 
-      // Save complete PDF to DB asynchronously without blocking
       saveSlotToDB(activePdfSlotIndex, bufferForDb, file.name, 1, pdf.numPages).catch((err) => {
         console.error('Failed to save PDF to DB:', err)
       })
@@ -969,16 +975,26 @@ function App() {
     void renderPdfPage(activePdfSlotIndex, pdfPageNumber + 1)
   }
 
-  const activatePdfSlot = (slotIndex: number) => {
+  const activatePdfSlot = async (slotIndex: number) => {
     setActivePdfSlotIndex(slotIndex)
 
     const slot = pdfSlots[slotIndex]
 
-    if (!slot?.pdf) {
+    if (slot?.pdf) {
+      void renderPdfPage(slotIndex, slot.pageNumber)
       return
     }
 
-    void renderPdfPage(slotIndex, slot.pageNumber)
+    if (pdfDataCacheRef.current.has(slotIndex)) {
+      try {
+        const buffer = pdfDataCacheRef.current.get(slotIndex)!
+        const pdf = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise
+        updatePdfSlot(slotIndex, { pdf })
+        void renderPdfPage(slotIndex, slot.pageNumber, pdf, slot.fileName)
+      } catch (error) {
+        console.error(`Failed to parse cached PDF for slot ${slotIndex}`, error)
+      }
+    }
   }
 
   const swipeHandlers = useSwipe(
@@ -995,7 +1011,7 @@ function App() {
     400
   )
 
-  // Initialization: Restore from IndexedDB
+  // Initialization: Lazy Restore from IndexedDB
   useEffect(() => {
     let isMounted = true
 
@@ -1010,22 +1026,36 @@ function App() {
         let activeFileName = ''
 
         for (const saved of savedSlots) {
-          try {
-            const pdf = await pdfjsLib.getDocument({ data: saved.pdfData.slice(0) }).promise
+          pdfDataCacheRef.current.set(saved.slotIndex, saved.pdfData)
+
+          if (saved.slotIndex === 0) {
+            try {
+              const pdf = await pdfjsLib.getDocument({ data: saved.pdfData.slice(0) }).promise
+              newSlots[saved.slotIndex] = {
+                pdf,
+                fileName: saved.fileName,
+                pageNumber: saved.pageNumber,
+                pageCount: saved.pageCount,
+              }
+              activePdfToRender = pdf
+              activePageToRender = saved.pageNumber
+              activeFileName = saved.fileName
+            } catch (err) {
+              console.error(`Failed to parse PDF for slot 0`, err)
+              newSlots[saved.slotIndex] = {
+                pdf: null,
+                fileName: saved.fileName,
+                pageNumber: saved.pageNumber,
+                pageCount: saved.pageCount,
+              }
+            }
+          } else {
             newSlots[saved.slotIndex] = {
-              pdf,
+              pdf: null,
               fileName: saved.fileName,
               pageNumber: saved.pageNumber,
               pageCount: saved.pageCount,
             }
-
-            if (saved.slotIndex === activePdfSlotIndex) {
-              activePdfToRender = pdf
-              activePageToRender = saved.pageNumber
-              activeFileName = saved.fileName
-            }
-          } catch (err) {
-            console.error(`Failed to parse PDF for slot ${saved.slotIndex}`, err)
           }
         }
 
@@ -1035,7 +1065,7 @@ function App() {
 
         if (activePdfToRender) {
           void renderPdfPage(
-            activePdfSlotIndex,
+            0,
             activePageToRender,
             activePdfToRender,
             activeFileName
@@ -1566,11 +1596,11 @@ function App() {
             <span>PDF Slot</span>
             <select
               value={activePdfSlotIndex}
-              onChange={(event) => activatePdfSlot(Number(event.target.value))}
+              onChange={(event) => void activatePdfSlot(Number(event.target.value))}
             >
               {pdfSlots.map((slot, index) => (
                 <option key={index} value={index}>
-                  {`Slot ${index + 1}${slot.pdf ? ` / ${slot.fileName}` : ''}`}
+                  {`Slot ${index + 1}${slot.fileName ? ` / ${slot.fileName}` : ''}`}
                 </option>
               ))}
             </select>
