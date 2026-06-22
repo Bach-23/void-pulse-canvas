@@ -23,6 +23,83 @@ const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
 const DEFAULT_SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
 const PDF_SLOT_COUNT = 10
 
+// --- IndexedDB Helper ---
+const DB_NAME = 'VoidPulseCanvasDB'
+const DB_VERSION = 1
+const STORE_NAME = 'pdfSlots'
+
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'slotIndex' })
+      }
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+const saveSlotToDB = async (
+  slotIndex: number,
+  pdfData: ArrayBuffer,
+  fileName: string,
+  pageNumber: number,
+  pageCount: number
+) => {
+  const db = await openDB()
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    store.put({ slotIndex, pdfData, fileName, pageNumber, pageCount })
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+const loadSlotsFromDB = async (): Promise<any[]> => {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const store = tx.objectStore(STORE_NAME)
+    const request = store.getAll()
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+const updateSlotPageInDB = async (slotIndex: number, pageNumber: number) => {
+  const db = await openDB()
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    const request = store.get(slotIndex)
+    request.onsuccess = () => {
+      const data = request.result
+      if (data) {
+        data.pageNumber = pageNumber
+        store.put(data)
+      }
+    }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+const clearPdfSlotsFromDB = async () => {
+  const db = await openDB()
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    store.clear()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+// --- End IndexedDB Helper ---
+
 const defaultPresetValues: PresetValues = {
   bpm: 105,
   timeSignature: '4/4',
@@ -769,6 +846,9 @@ function App() {
   const resetPdfSlots = () => {
     setPdfSlots(createInitialPdfSlots())
     setActivePdfSlotIndex(0)
+    clearPdfSlotsFromDB().catch((err) => {
+      console.error('Failed to clear PDF slots from DB:', err)
+    })
   }
 
   const handleScoreFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -833,6 +913,11 @@ function App() {
         pageCount: totalPages,
       })
 
+      // Update page progress silently in IndexedDB
+      updateSlotPageInDB(slotIndex, safePageNumber).catch((err) => {
+        console.error('Failed to update PDF page in DB:', err)
+      })
+
       loadScoreImageFromDataUrl(
         dataUrl,
         `Slot ${slotIndex + 1}: ${fileName} / page ${safePageNumber}`,
@@ -850,6 +935,8 @@ function App() {
 
     try {
       const arrayBuffer = await file.arrayBuffer()
+      const bufferForDb = arrayBuffer.slice(0) // Copy buffer to prevent transfer detachment issues
+
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
 
       updatePdfSlot(activePdfSlotIndex, {
@@ -860,6 +947,11 @@ function App() {
       })
 
       await renderPdfPage(activePdfSlotIndex, 1, pdf, file.name)
+
+      // Save complete PDF to DB asynchronously without blocking
+      saveSlotToDB(activePdfSlotIndex, bufferForDb, file.name, 1, pdf.numPages).catch((err) => {
+        console.error('Failed to save PDF to DB:', err)
+      })
     } catch (error) {
       console.error('Failed to load PDF score:', error)
     } finally {
@@ -902,6 +994,65 @@ function App() {
     },
     400
   )
+
+  // Initialization: Restore from IndexedDB
+  useEffect(() => {
+    let isMounted = true
+
+    const restorePdfsFromDB = async () => {
+      try {
+        const savedSlots = await loadSlotsFromDB()
+        if (!isMounted || savedSlots.length === 0) return
+
+        const newSlots = createInitialPdfSlots()
+        let activePdfToRender: any = null
+        let activePageToRender = 1
+        let activeFileName = ''
+
+        for (const saved of savedSlots) {
+          try {
+            const pdf = await pdfjsLib.getDocument({ data: saved.pdfData.slice(0) }).promise
+            newSlots[saved.slotIndex] = {
+              pdf,
+              fileName: saved.fileName,
+              pageNumber: saved.pageNumber,
+              pageCount: saved.pageCount,
+            }
+
+            if (saved.slotIndex === activePdfSlotIndex) {
+              activePdfToRender = pdf
+              activePageToRender = saved.pageNumber
+              activeFileName = saved.fileName
+            }
+          } catch (err) {
+            console.error(`Failed to parse PDF for slot ${saved.slotIndex}`, err)
+          }
+        }
+
+        if (!isMounted) return
+
+        setPdfSlots(newSlots)
+
+        if (activePdfToRender) {
+          void renderPdfPage(
+            activePdfSlotIndex,
+            activePageToRender,
+            activePdfToRender,
+            activeFileName
+          )
+        }
+      } catch (err) {
+        console.error('Failed to restore PDFs from IndexedDB', err)
+      }
+    }
+
+    restorePdfsFromDB()
+
+    return () => {
+      isMounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
