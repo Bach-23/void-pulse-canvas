@@ -2,7 +2,7 @@ export type TimeSignature = '2/4' | '3/4' | '4/4' | 'Free'
 export type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
 export type ClickSubdivision = 'Quarter' | 'Eighth'
 export type BeatIntensity = 'High' | 'Mid' | 'Low'
-export type VisualEffect = 'Ripple' | 'Line Sweep' | 'None'
+export type VisualEffect = 'Ripple' | 'Line Sweep' | 'Ghost Sweep' | 'None'
 
 export type BackgroundMode =
   | 'Image'

@@ -59,7 +59,7 @@ const clickSoundOptions: ClickSound[] = [
 ]
 
 const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth']
-const visualEffectOptions: VisualEffect[] = ['Ripple', 'Line Sweep', 'None']
+const visualEffectOptions: VisualEffect[] = ['Ripple', 'Line Sweep', 'Ghost Sweep', 'None']
 
 const presetOptions: PresetName[] = [
   'Current',
@@ -123,7 +123,7 @@ const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
 }
 
 const isVisualEffect = (value: unknown): value is VisualEffect => {
-  return value === 'Ripple' || value === 'Line Sweep' || value === 'None'
+  return value === 'Ripple' || value === 'Line Sweep' || value === 'Ghost Sweep' || value === 'None'
 }
 
 const isPresetName = (value: unknown): value is PresetName => {
@@ -270,6 +270,50 @@ function loadSettings(): SavedSettings {
   }
 }
 
+function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs: number = 400) {
+  const startPos = useRef<{ x: number; y: number; time: number } | null>(null)
+  const isCooldown = useRef(false)
+
+  const onPointerDown = useCallback((event: React.PointerEvent) => {
+    if (!event.isPrimary) return
+    const target = event.target as HTMLElement
+    if (target.closest('button, input, select, textarea, .ui-panel, .slider-control, .compact-control')) return
+    startPos.current = { x: event.clientX, y: event.clientY, time: Date.now() }
+  }, [])
+
+  const onPointerUp = useCallback((event: React.PointerEvent) => {
+    if (!event.isPrimary || !startPos.current || isCooldown.current) {
+      startPos.current = null
+      return
+    }
+
+    const dx = event.clientX - startPos.current.x
+    const dy = event.clientY - startPos.current.y
+    const dt = Date.now() - startPos.current.time
+
+    startPos.current = null
+
+    if (dt > 1000) return
+
+    const absDx = Math.abs(dx)
+    const absDy = Math.abs(dy)
+
+    if (absDx > 56 && absDx > absDy * 1.4) {
+      isCooldown.current = true
+      if (dx > 0) {
+        onSwipeRight()
+      } else {
+        onSwipeLeft()
+      }
+      setTimeout(() => {
+        isCooldown.current = false
+      }, cooldownMs)
+    }
+  }, [onSwipeLeft, onSwipeRight, cooldownMs])
+
+  return { onPointerDown, onPointerUp }
+}
+
 function App() {
   const [settings, setSettings] = useState<SavedSettings>(() => loadSettings())
 
@@ -304,6 +348,7 @@ function App() {
   const lastBeatTimeRef = useRef<number | null>(null)
   const maxDiffRef = useRef(0)
   const beatCountRef = useRef(0)
+  const isRenderingPdfRef = useRef(false)
 
   const scoreCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const scoreImageRef = useRef<HTMLImageElement | null>(null)
@@ -731,43 +776,50 @@ function App() {
     pdfOverride?: any,
     fileNameOverride?: string,
   ) => {
-    const slot = pdfSlots[slotIndex]
-    const pdf = pdfOverride ?? slot?.pdf
+    if (isRenderingPdfRef.current) return
+    isRenderingPdfRef.current = true
 
-    if (!pdf) return
+    try {
+      const slot = pdfSlots[slotIndex]
+      const pdf = pdfOverride ?? slot?.pdf
 
-    const totalPages = pdf.numPages
-    const safePageNumber = Math.min(Math.max(pageNumber, 1), totalPages)
-    const page = await pdf.getPage(safePageNumber)
-    const viewport = page.getViewport({ scale: 2 })
+      if (!pdf) return
 
-    const temporaryCanvas = document.createElement('canvas')
-    const temporaryContext = temporaryCanvas.getContext('2d')
+      const totalPages = pdf.numPages
+      const safePageNumber = Math.min(Math.max(pageNumber, 1), totalPages)
+      const page = await pdf.getPage(safePageNumber)
+      const viewport = page.getViewport({ scale: 2 })
 
-    if (!temporaryContext) return
+      const temporaryCanvas = document.createElement('canvas')
+      const temporaryContext = temporaryCanvas.getContext('2d')
 
-    temporaryCanvas.width = Math.floor(viewport.width)
-    temporaryCanvas.height = Math.floor(viewport.height)
+      if (!temporaryContext) return
 
-    await page.render({
-      canvasContext: temporaryContext,
-      viewport,
-    }).promise
+      temporaryCanvas.width = Math.floor(viewport.width)
+      temporaryCanvas.height = Math.floor(viewport.height)
 
-    const dataUrl = temporaryCanvas.toDataURL('image/png')
-    const fileName = fileNameOverride ?? slot?.fileName ?? 'PDF Score'
+      await page.render({
+        canvasContext: temporaryContext,
+        viewport,
+      }).promise
 
-    updatePdfSlot(slotIndex, {
-      pdf,
-      fileName,
-      pageNumber: safePageNumber,
-      pageCount: totalPages,
-    })
+      const dataUrl = temporaryCanvas.toDataURL('image/png')
+      const fileName = fileNameOverride ?? slot?.fileName ?? 'PDF Score'
 
-    loadScoreImageFromDataUrl(
-      dataUrl,
-      `Slot ${slotIndex + 1}: ${fileName} / page ${safePageNumber}`,
-    )
+      updatePdfSlot(slotIndex, {
+        pdf,
+        fileName,
+        pageNumber: safePageNumber,
+        pageCount: totalPages,
+      })
+
+      loadScoreImageFromDataUrl(
+        dataUrl,
+        `Slot ${slotIndex + 1}: ${fileName} / page ${safePageNumber}`,
+      )
+    } finally {
+      isRenderingPdfRef.current = false
+    }
   }
 
   const handleScorePdfChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -816,6 +868,20 @@ function App() {
 
     void renderPdfPage(slotIndex, slot.pageNumber)
   }
+
+  const swipeHandlers = useSwipe(
+    () => {
+      if (isPdfLoaded && pdfPageNumber < pdfPageCount && !isRenderingPdfRef.current) {
+        showNextPdfPage()
+      }
+    },
+    () => {
+      if (isPdfLoaded && pdfPageNumber > 1 && !isRenderingPdfRef.current) {
+        showPreviousPdfPage()
+      }
+    },
+    400
+  )
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
@@ -884,6 +950,10 @@ function App() {
   }, [timeSignature, bpm])
 
   useEffect(() => {
+    setGhosts([])
+  }, [visualEffect])
+
+  useEffect(() => {
     let hideTimerId: number | undefined
 
     const showUi = () => {
@@ -914,14 +984,20 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (visualEffect !== 'Line Sweep' || !isRunning) return
+    if ((visualEffect !== 'Line Sweep' && visualEffect !== 'Ghost Sweep') || !isRunning) return
 
     const isBar = timeSignature !== 'Free' && currentBeat === 0
-    const leftPos = timeSignature === 'Free' ? 0 : (currentBeat / beatsPerBar) * 100
+    const leftPos = timeSignature === 'Free' ? 7 : 7 + (currentBeat / beatsPerBar) * 86
 
     setGhosts((prev) => {
-      const next = [...prev, { id: smallRippleKey, left: leftPos, isBar }]
-      return next.slice(-8)
+      const next = [...prev]
+      if (isBar) {
+        next.push({ id: smallRippleKey, left: 7, isBar: true })
+        next.push({ id: smallRippleKey + 1000000, left: 93, isBar: true })
+      } else {
+        next.push({ id: smallRippleKey, left: leftPos, isBar: false })
+      }
+      return visualEffect === 'Ghost Sweep' ? next.slice(-32) : next.slice(-12)
     })
   }, [smallRippleKey, visualEffect, isRunning, currentBeat, beatsPerBar, timeSignature])
 
@@ -944,10 +1020,10 @@ function App() {
     >
       <style>{`
         @keyframes sweep-slide {
-          0% { left: 0%; }
-          100% { left: 100%; }
+          0% { left: 7%; }
+          100% { left: 93%; }
         }
-        @keyframes ghost-fade {
+        @keyframes line-sweep-fade {
           0% { 
             opacity: 1; 
             background: rgba(255, 255, 255, 1);
@@ -959,7 +1035,7 @@ function App() {
             box-shadow: 0 0 0px transparent; 
           }
         }
-        @keyframes ghost-fade-bar {
+        @keyframes line-sweep-fade-bar {
           0% { 
             opacity: 1; 
             width: 2px; 
@@ -971,6 +1047,43 @@ function App() {
             width: 2px; 
             background: rgba(200, 220, 255, 0.4);
             box-shadow: 0 0 0px transparent; 
+          }
+        }
+        @keyframes ghost-sweep-fade {
+          0% {
+            opacity: 0.85;
+            background: rgba(230, 238, 255, 0.85);
+            box-shadow: 0 0 10px rgba(210, 225, 255, 0.55);
+          }
+          65% {
+            opacity: 0.16;
+            background: rgba(180, 205, 255, 0.18);
+            box-shadow: 0 0 4px rgba(180, 205, 255, 0.18);
+          }
+          100% {
+            opacity: 0.06;
+            background: rgba(150, 180, 230, 0.08);
+            box-shadow: 0 0 0 transparent;
+          }
+        }
+        @keyframes ghost-sweep-fade-bar {
+          0% {
+            opacity: 1;
+            width: 2px;
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 0 16px rgba(220, 230, 255, 0.9);
+          }
+          70% {
+            opacity: 0.22;
+            width: 2px;
+            background: rgba(190, 215, 255, 0.22);
+            box-shadow: 0 0 6px rgba(190, 215, 255, 0.22);
+          }
+          100% {
+            opacity: 0.09;
+            width: 1px;
+            background: rgba(150, 180, 230, 0.1);
+            box-shadow: 0 0 0 transparent;
           }
         }
         .sweep-container {
@@ -999,12 +1112,27 @@ function App() {
           );
           transform: translateX(-50%);
         }
-        .ghost-line {
+        .line-sweep-ghost {
           position: absolute;
           top: 0;
           bottom: 0;
           width: 1px;
           transform: translateX(-50%);
+        }
+        .ghost-sweep-ghost {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 1px;
+          transform: translateX(-50%);
+        }
+        .score-swipe-layer {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          z-index: 4;
         }
       `}</style>
 
@@ -1038,6 +1166,17 @@ function App() {
         <canvas ref={scoreCanvasRef} />
       </div>
 
+      {isScoreVisible && isPdfLoaded && (
+        <div
+          className="score-swipe-layer"
+          {...swipeHandlers}
+          style={{
+            touchAction: 'none',
+            overscrollBehavior: 'contain',
+          }}
+        />
+      )}
+
       {isRunning && visualEffect === 'Ripple' && (
         <>
           <div key={`small-${smallRippleKey}`} className="small-ripple" />
@@ -1060,12 +1199,36 @@ function App() {
           {ghosts.map((g) => (
             <div
               key={g.id}
-              className="ghost-line"
+              className="line-sweep-ghost"
               style={{
                 left: `${g.left}%`,
                 animation: g.isBar
-                  ? 'ghost-fade-bar 2.0s ease-out forwards'
-                  : 'ghost-fade 1.5s ease-out forwards'
+                  ? 'line-sweep-fade-bar 2.0s ease-out forwards'
+                  : 'line-sweep-fade 1.5s ease-out forwards'
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {isRunning && visualEffect === 'Ghost Sweep' && (
+        <div className="sweep-container">
+          <div
+            key={`sweep-${largeRippleKey}`}
+            className="sweep-line"
+            style={{
+              animation: `sweep-slide ${largeRippleDuration}s linear infinite`
+            }}
+          />
+          {ghosts.map((g) => (
+            <div
+              key={g.id}
+              className="ghost-sweep-ghost"
+              style={{
+                left: `${g.left}%`,
+                animation: g.isBar
+                  ? 'ghost-sweep-fade-bar 7.0s cubic-bezier(0.2, 0.7, 0.3, 1) forwards'
+                  : 'ghost-sweep-fade 5.0s cubic-bezier(0.2, 0.7, 0.3, 1) forwards'
               }}
             />
           ))}

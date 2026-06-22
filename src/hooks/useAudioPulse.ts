@@ -69,7 +69,7 @@ export function useAudioPulse({
     const channelData = buffer.getChannelData(0)
 
     for (let index = 0; index < frameCount; index += 1) {
-      const whiteNoise = Math.random() * 2 - 1
+      const whiteNoise = (Math.random() * 2 - 1) * 0.4
       channelData[index] = whiteNoise
     }
 
@@ -89,7 +89,9 @@ export function useAudioPulse({
     let type: OscillatorType = 'sine'
     let freq = 880
     let peakGain = 0.5
+    let attack = 0.002
     let decay = 0.05
+    let isExpAttack = false
     let filterType: BiquadFilterType = 'lowpass'
     let filterFreq = 6000
     let filterQ = 0
@@ -99,33 +101,43 @@ export function useAudioPulse({
       type = 'sine'
       freq = intensity === 'High' ? 1480 : intensity === 'Mid' ? 980 : 740
       peakGain = intensity === 'High' ? 0.6 : intensity === 'Mid' ? 0.4 : 0.25
-      decay = 0.03
-      filterType = 'highpass'
-      filterFreq = 400
+      attack = 0.0015
+      decay = 0.025
+      isExpAttack = true
+      filterType = 'lowpass'
+      filterFreq = 8000
+      pitchDrop = false
     } else if (sound === 'Wood') {
       type = 'triangle'
-      freq = intensity === 'High' ? 720 : intensity === 'Mid' ? 480 : 340
-      peakGain = intensity === 'High' ? 0.55 : intensity === 'Mid' ? 0.38 : 0.25
-      decay = 0.026
+      freq = intensity === 'High' ? 700 : intensity === 'Mid' ? 460 : 320
+      peakGain = intensity === 'High' ? 0.5 : intensity === 'Mid' ? 0.34 : 0.22
+      attack = 0.0028
+      decay = 0.034
       filterType = 'lowpass'
-      filterFreq = 2000
-      filterQ = 0.25
+      filterFreq = 1400
+      filterQ = 0.2
       pitchDrop = false
     } else if (sound === 'Metal') {
-      type = 'square'
-      freq = intensity === 'High' ? 1800 : intensity === 'Mid' ? 1200 : 900
-      peakGain = intensity === 'High' ? 0.25 : intensity === 'Mid' ? 0.15 : 0.1
+      type = 'triangle'
+      freq = intensity === 'High' ? 2000 : intensity === 'Mid' ? 1400 : 1000
+      peakGain = intensity === 'High' ? 0.2 : intensity === 'Mid' ? 0.13 : 0.08
+      attack = 0.002
       decay = 0.02
-      filterType = 'bandpass'
-      filterFreq = freq
-      filterQ = 2.0
+      filterType = 'lowpass'
+      filterFreq = 3200
+      filterQ = 0.3
+      pitchDrop = false
     } else if (sound === 'Muted Key') {
       type = 'sine'
       freq = intensity === 'High' ? 400 : intensity === 'Mid' ? 300 : 200
-      peakGain = intensity === 'High' ? 0.9 : intensity === 'Mid' ? 0.7 : 0.5
-      decay = 0.06
+      peakGain = intensity === 'High' ? 0.3 : intensity === 'Mid' ? 0.2 : 0.12
+      attack = 0.003
+      decay = 0.035
+      isExpAttack = false
       filterType = 'lowpass'
-      filterFreq = 600
+      filterFreq = 500
+      filterQ = 0.2
+      pitchDrop = false
     }
 
     oscillator.type = type
@@ -139,10 +151,15 @@ export function useAudioPulse({
     }
 
     const adjustedPeak = Math.max(0.0001, peakGain * volumeRatio)
-    const attack = 0.002
 
-    gainNode.gain.setValueAtTime(0, now)
-    gainNode.gain.linearRampToValueAtTime(adjustedPeak, now + attack)
+    if (isExpAttack) {
+      gainNode.gain.setValueAtTime(0.0001, now)
+      gainNode.gain.exponentialRampToValueAtTime(adjustedPeak, now + attack)
+    } else {
+      gainNode.gain.setValueAtTime(0, now)
+      gainNode.gain.linearRampToValueAtTime(adjustedPeak, now + attack)
+    }
+
     gainNode.gain.exponentialRampToValueAtTime(0.0001, now + attack + decay)
 
     oscillator.connect(filterNode)
@@ -166,23 +183,23 @@ export function useAudioPulse({
     source.buffer = createNoiseBuffer(audioContext, 0.15)
 
     highPassNode.type = 'highpass'
-    highPassNode.frequency.setValueAtTime(400, now)
+    highPassNode.frequency.setValueAtTime(700, now)
     highPassNode.Q.setValueAtTime(0.5, now)
 
     lowPassNode.type = 'lowpass'
     lowPassNode.frequency.setValueAtTime(
-      intensity === 'High' ? 2200 : intensity === 'Mid' ? 1400 : 900, 
+      intensity === 'High' ? 1400 : intensity === 'Mid' ? 1100 : 800, 
       now
     )
     lowPassNode.Q.setValueAtTime(0.7, now)
 
-    const baseGain = intensity === 'High' ? 0.35 : intensity === 'Mid' ? 0.25 : 0.15
+    const baseGain = intensity === 'High' ? 0.25 : intensity === 'Mid' ? 0.18 : 0.12
     const adjustedPeak = Math.max(0.0001, baseGain * volumeRatio)
-    const attack = 0.01
-    const decay = 0.08
+    const attack = 0.025
+    const decay = 0.05
 
-    gainNode.gain.setValueAtTime(0, now)
-    gainNode.gain.linearRampToValueAtTime(adjustedPeak, now + attack)
+    gainNode.gain.setValueAtTime(0.0001, now)
+    gainNode.gain.exponentialRampToValueAtTime(adjustedPeak, now + attack)
     gainNode.gain.exponentialRampToValueAtTime(0.0001, now + attack + decay)
 
     source.connect(highPassNode)
