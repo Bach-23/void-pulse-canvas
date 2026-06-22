@@ -970,12 +970,14 @@ function App() {
 
     window.addEventListener('mousemove', showUi)
     window.addEventListener('keydown', showUi)
+    window.addEventListener('pointerdown', showUi)
 
     showUi()
 
     return () => {
       window.removeEventListener('mousemove', showUi)
       window.removeEventListener('keydown', showUi)
+      window.removeEventListener('pointerdown', showUi)
 
       if (hideTimerId) {
         window.clearTimeout(hideTimerId)
@@ -1132,7 +1134,6 @@ function App() {
           left: 0;
           width: 100%;
           height: 100%;
-          z-index: 4;
         }
       `}</style>
 
