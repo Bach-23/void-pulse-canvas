@@ -319,6 +319,7 @@ function App() {
 
   const [isRunning, setIsRunning] = useState(true)
   const [isAudioEnabled, setIsAudioEnabled] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [currentBeat, setCurrentBeat] = useState(0)
   const [smallRippleKey, setSmallRippleKey] = useState(0)
   const [largeRippleKey, setLargeRippleKey] = useState(0)
@@ -679,6 +680,25 @@ function App() {
     setIsAudioEnabled(false)
   }
 
+  const toggleFullscreen = async () => {
+    const docEl = document.documentElement as any
+    const doc = document as any
+
+    const requestFullscreen = docEl.requestFullscreen || docEl.webkitRequestFullscreen
+    const exitFullscreen = doc.exitFullscreen || doc.webkitExitFullscreen
+    const isFull = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement)
+
+    try {
+      if (!isFull) {
+        if (requestFullscreen) await requestFullscreen.call(docEl)
+      } else {
+        if (exitFullscreen) await exitFullscreen.call(doc)
+      }
+    } catch (error) {
+      console.error('Fullscreen API error:', error)
+    }
+  }
+
   const renderScoreCanvas = () => {
     const canvas = scoreCanvasRef.current
     const image = scoreImageRef.current
@@ -982,6 +1002,22 @@ function App() {
       if (hideTimerId) {
         window.clearTimeout(hideTimerId)
       }
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const doc = document as any
+      const isFull = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement)
+      setIsFullscreen(isFull)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
     }
   }, [])
 
@@ -1396,6 +1432,15 @@ function App() {
 
             <button className="score-switch" onClick={saveCurrentPreset}>
               Save Current
+            </button>
+          </div>
+
+          <div className="score-switch-group">
+            <button
+              className={`score-switch ${isFullscreen ? 'is-active' : ''}`}
+              onClick={toggleFullscreen}
+            >
+              {isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
             </button>
           </div>
 
