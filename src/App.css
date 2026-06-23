@@ -474,3 +474,16 @@ h1 {
       scale(calc(4.8 + 2.4 * var(--large-ripple-intensity)));
   }
 }
+
+/* Plain Mode: PDFを通常表示に戻す */
+.score-plain-mode .score-overlay {
+  mix-blend-mode: normal;
+  filter: none;
+}
+
+.score-plain-mode .score-overlay canvas {
+  mix-blend-mode: normal;
+  filter: none;
+  opacity: 1;
+  background-color: #ffffff;
+}

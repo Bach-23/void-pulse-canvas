@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, CSSProperties } from 'react'
+import type { ChangeEvent, CSSProperties, PointerEvent } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 import { useAudioPulse } from './hooks/useAudioPulse'
@@ -351,14 +351,14 @@ function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs:
   const startPos = useRef<{ x: number; y: number; time: number } | null>(null)
   const isCooldown = useRef(false)
 
-  const onPointerDown = useCallback((event: React.PointerEvent) => {
+  const onPointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
     if (!event.isPrimary) return
     const target = event.target as HTMLElement
     if (target.closest('button, input, select, textarea, .ui-panel, .slider-control, .compact-control')) return
     startPos.current = { x: event.clientX, y: event.clientY, time: Date.now() }
   }, [])
 
-  const onPointerUp = useCallback((event: React.PointerEvent) => {
+  const onPointerUp = useCallback((event: PointerEvent<HTMLElement>) => {
     if (!event.isPrimary || !startPos.current || isCooldown.current) {
       startPos.current = null
       return
@@ -402,6 +402,8 @@ function App() {
   const [largeRippleKey, setLargeRippleKey] = useState(0)
   const [isUiVisible, setIsUiVisible] = useState(true)
 
+  const [scoreRenderMode, setScoreRenderMode] = useState<'void' | 'plain'>('void')
+
   const [ghosts, setGhosts] = useState<{ id: number; left: number; isBar: boolean }[]>([])
 
   const [isScoreImageLoaded, setIsScoreImageLoaded] = useState(false)
@@ -413,10 +415,8 @@ function App() {
   const [pdfSlots, setPdfSlots] = useState<PdfSlot[]>(() =>
     createInitialPdfSlots(),
   )
-  // Active PDF slot always starts at 0
   const [activePdfSlotIndex, setActivePdfSlotIndex] = useState(0)
 
-  // Cache to hold ArrayBuffers from IndexedDB, bypassing heavy PDF parsing on load
   const pdfDataCacheRef = useRef<Map<number, ArrayBuffer>>(new Map())
 
   const [debugMetrics, setDebugMetrics] = useState<DebugMetrics>({
@@ -799,6 +799,10 @@ function App() {
     context.clearRect(0, 0, width, height)
     context.drawImage(image, 0, 0, width, height)
 
+    if (scoreRenderMode === 'plain') {
+      return
+    }
+
     const imageData = context.getImageData(0, 0, width, height)
     const data = imageData.data
 
@@ -918,7 +922,6 @@ function App() {
         pageCount: totalPages,
       })
 
-      // Update page progress silently in IndexedDB
       updateSlotPageInDB(slotIndex, safePageNumber).catch((err) => {
         console.error('Failed to update PDF page in DB:', err)
       })
@@ -1011,7 +1014,6 @@ function App() {
     400
   )
 
-  // Initialization: Lazy Restore from IndexedDB
   useEffect(() => {
     let isMounted = true
 
@@ -1124,6 +1126,7 @@ function App() {
     scoreWhiteCut,
     scoreInkBoost,
     scoreImageSource,
+    scoreRenderMode,
   ])
 
   useEffect(() => {
@@ -1222,7 +1225,7 @@ function App() {
 
   return (
     <main
-      className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'}`}
+      className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'} score-${scoreRenderMode}-mode`}
       style={
         {
           '--beat-duration': `${beatDuration}s`,
@@ -1352,6 +1355,15 @@ function App() {
           width: 100%;
           height: 100%;
         }
+        .score-plain-mode .score-overlay {
+          mix-blend-mode: normal !important;
+        }
+        .score-plain-mode .score-overlay canvas {
+          mix-blend-mode: normal !important;
+          filter: none !important;
+          opacity: 1 !important;
+          background-color: #ffffff;
+        }
       `}</style>
 
       <input
@@ -1378,7 +1390,7 @@ function App() {
       <div
         className="score-overlay"
         style={{
-          opacity: isScoreVisible ? undefined : 0,
+          opacity: isScoreVisible ? (scoreRenderMode === 'plain' ? 1 : undefined) : 0,
         }}
       >
         <canvas ref={scoreCanvasRef} />
@@ -1589,6 +1601,19 @@ function App() {
                   {effect}
                 </option>
               ))}
+            </select>
+          </label>
+
+          <label className="compact-control sound-control">
+            <span>Score Mode</span>
+            <select
+              value={scoreRenderMode}
+              onChange={(event) =>
+                setScoreRenderMode(event.target.value as 'void' | 'plain')
+              }
+            >
+              <option value="void">Void</option>
+              <option value="plain">Plain</option>
             </select>
           </label>
 
@@ -1875,6 +1900,7 @@ function App() {
         <span>VOL {volume}</span>
         <span>{backgroundMode}</span>
         <span>{visualEffect}</span>
+        <span>{scoreRenderMode === 'void' ? 'Void Mode' : 'Plain Mode'}</span>
         <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
         <span>{`Slot ${activePdfSlotIndex + 1}`}</span>
         <span>{scoreImageName}</span>
