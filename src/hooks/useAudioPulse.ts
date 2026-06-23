@@ -1,5 +1,4 @@
 import { useEffect, useRef, useCallback } from 'react'
-import type { Dispatch, SetStateAction } from 'react'
 import type { BeatIntensity, ClickSound, ClickSubdivision, TimeSignature } from '../types'
 
 type UseAudioPulseProps = {
@@ -11,11 +10,6 @@ type UseAudioPulseProps = {
   clickSound: ClickSound
   clickSubdivision: ClickSubdivision
   volumeRatio: number
-  targetBeatMs: number
-  updateDebugMetrics: () => void
-  setSmallRippleKey: Dispatch<SetStateAction<number>>
-  setCurrentBeat: Dispatch<SetStateAction<number>>
-  setLargeRippleKey: Dispatch<SetStateAction<number>>
 }
 
 export function useAudioPulse({
@@ -27,13 +21,12 @@ export function useAudioPulse({
   clickSound,
   clickSubdivision,
   volumeRatio,
-  targetBeatMs,
-  updateDebugMetrics,
-  setSmallRippleKey,
-  setCurrentBeat,
-  setLargeRippleKey,
 }: UseAudioPulseProps) {
   const audioContextRef = useRef<AudioContext | null>(null)
+  const startTimeRef = useRef<number | null>(null)
+  
+  // Stateを完全に排除し、純粋な参照型（Ref）として時間を保持
+  const elapsedTimeRef = useRef<number>(0)
 
   const ensureAudioContext = useCallback(async () => {
     let needsWarmup = false
@@ -211,61 +204,74 @@ export function useAudioPulse({
     source.stop(now + attack + decay + 0.01)
   }, [createNoiseBuffer, volumeRatio])
 
-  const playClick = useCallback(async (intensity: BeatIntensity) => {
-    if (!isAudioEnabled) return
-    if (volumeRatio <= 0) return
-
-    const audioContext = await ensureAudioContext()
-    const now = audioContext.currentTime
-
-    if (clickSound === 'Breath') {
-      playBreathClick(audioContext, now, intensity)
-      return
-    }
-
-    playOscillatorClick(audioContext, now, intensity, clickSound)
-  }, [isAudioEnabled, volumeRatio, ensureAudioContext, clickSound, playBreathClick, playOscillatorClick])
-
   useEffect(() => {
     if (!isRunning) {
+      startTimeRef.current = null
+      elapsedTimeRef.current = 0 
       return
     }
 
-    const eighthClickTimeoutIds: number[] = []
+    let schedulerTimerId: number
+    let animationFrameId: number
+    let nextNoteTime = -1
+    let scheduledBeatIndex = 0
 
-    const intervalId = window.setInterval(() => {
-      updateDebugMetrics()
-      setSmallRippleKey((key) => key + 1)
+    const lookaheadMs = 25.0
+    const scheduleAheadTime = 0.1 
 
-      setCurrentBeat((beat) => {
-        const nextBeat = (beat + 1) % beatsPerBar
-        const isBarHead = timeSignature !== 'Free' && nextBeat === 0
+    const scheduler = async () => {
+      const ctx = await ensureAudioContext()
+      
+      if (nextNoteTime === -1) {
+        nextNoteTime = ctx.currentTime + 0.05
+        startTimeRef.current = nextNoteTime 
+      }
 
-        if (isBarHead) {
-          setLargeRippleKey((key) => key + 1)
+      while (nextNoteTime < ctx.currentTime + scheduleAheadTime) {
+        const currentBeatInBar = beatsPerBar === 1 ? 0 : scheduledBeatIndex % beatsPerBar
+        const isBarHead = timeSignature !== 'Free' && currentBeatInBar === 0
+        const intensity: BeatIntensity = timeSignature === 'Free' ? 'Mid' : (isBarHead ? 'High' : 'Mid')
+        
+        if (isAudioEnabled && volumeRatio > 0) {
+          if (clickSound === 'Breath') {
+            playBreathClick(ctx, nextNoteTime, intensity)
+          } else {
+            playOscillatorClick(ctx, nextNoteTime, intensity, clickSound)
+          }
+
+          if (clickSubdivision === 'Eighth') {
+            const eighthTime = nextNoteTime + beatDuration / 2
+            if (clickSound === 'Breath') {
+              playBreathClick(ctx, eighthTime, 'Low')
+            } else {
+              playOscillatorClick(ctx, eighthTime, 'Low', clickSound)
+            }
+          }
         }
 
-        const currentIntensity: BeatIntensity = timeSignature === 'Free' ? 'Mid' : (isBarHead ? 'High' : 'Mid')
-        void playClick(currentIntensity)
+        nextNoteTime += beatDuration
+        scheduledBeatIndex += 1
+      }
+      
+      schedulerTimerId = window.setTimeout(scheduler, lookaheadMs)
+    }
 
-        if (clickSubdivision === 'Eighth') {
-          const timeoutId = window.setTimeout(() => {
-            void playClick('Low')
-          }, (beatDuration * 1000) / 2)
+    const renderLoop = () => {
+      const ctx = audioContextRef.current
+      if (ctx && startTimeRef.current !== null) {
+        const now = ctx.currentTime
+        const elapsed = now - startTimeRef.current
+        elapsedTimeRef.current = Math.max(0, elapsed)
+      }
+      animationFrameId = window.requestAnimationFrame(renderLoop)
+    }
 
-          eighthClickTimeoutIds.push(timeoutId)
-        }
-
-        return nextBeat
-      })
-    }, beatDuration * 1000)
+    scheduler()
+    animationFrameId = window.requestAnimationFrame(renderLoop)
 
     return () => {
-      window.clearInterval(intervalId)
-
-      eighthClickTimeoutIds.forEach((timeoutId) => {
-        window.clearTimeout(timeoutId)
-      })
+      window.clearTimeout(schedulerTimerId)
+      window.cancelAnimationFrame(animationFrameId)
     }
   }, [
     isRunning,
@@ -276,13 +282,13 @@ export function useAudioPulse({
     clickSound,
     clickSubdivision,
     volumeRatio,
-    targetBeatMs,
-    updateDebugMetrics,
-    setSmallRippleKey,
-    setCurrentBeat,
-    setLargeRippleKey,
-    playClick
+    ensureAudioContext,
+    playBreathClick,
+    playOscillatorClick,
   ])
 
-  return { ensureAudioContext }
+  return { 
+    ensureAudioContext, 
+    getElapsedTime: useCallback(() => elapsedTimeRef.current, [])
+  }
 }

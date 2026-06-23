@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, CSSProperties, PointerEvent } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
+
+// @ts-ignore
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
+// @ts-ignore
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker?url'
+
 import { useAudioPulse } from './hooks/useAudioPulse'
 import type {
   TimeSignature,
@@ -397,14 +401,11 @@ function App() {
   const [isRunning, setIsRunning] = useState(true)
   const [isAudioEnabled, setIsAudioEnabled] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [currentBeat, setCurrentBeat] = useState(0)
-  const [smallRippleKey, setSmallRippleKey] = useState(0)
-  const [largeRippleKey, setLargeRippleKey] = useState(0)
   const [isUiVisible, setIsUiVisible] = useState(true)
 
-  const [scoreRenderMode, setScoreRenderMode] = useState<'void' | 'plain'>('void')
+  const [, forceFrame] = useState(0)
 
-  const [ghosts, setGhosts] = useState<{ id: number; left: number; isBar: boolean }[]>([])
+  const [scoreRenderMode, setScoreRenderMode] = useState<'void' | 'plain'>('void')
 
   const [isScoreImageLoaded, setIsScoreImageLoaded] = useState(false)
   const [scoreImageSource, setScoreImageSource] = useState(
@@ -427,11 +428,7 @@ function App() {
     beatCount: 0,
   })
 
-  const lastBeatTimeRef = useRef<number | null>(null)
-  const maxDiffRef = useRef(0)
-  const beatCountRef = useRef(0)
   const isRenderingPdfRef = useRef(false)
-
   const scoreCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const scoreImageRef = useRef<HTMLImageElement | null>(null)
   const scoreFileInputRef = useRef<HTMLInputElement | null>(null)
@@ -625,10 +622,6 @@ function App() {
     return 60 / safeBpm
   }, [safeBpm])
 
-  const targetBeatMs = useMemo(() => {
-    return beatDuration * 1000
-  }, [beatDuration])
-
   const largeRippleDuration = useMemo(() => {
     if (timeSignature === 'Free') return beatDuration
     return beatDuration * beatsPerBar
@@ -686,57 +679,7 @@ function App() {
     }
   }, [backgroundMode])
 
-  const resetDebugMetrics = () => {
-    lastBeatTimeRef.current = null
-    maxDiffRef.current = 0
-    beatCountRef.current = 0
-
-    setDebugMetrics({
-      targetMs: targetBeatMs,
-      actualMs: null,
-      diffMs: null,
-      maxDiffMs: 0,
-      beatCount: 0,
-    })
-  }
-
-  const updateDebugMetrics = useCallback(() => {
-    const now = performance.now()
-    const previousBeatTime = lastBeatTimeRef.current
-
-    beatCountRef.current += 1
-
-    if (previousBeatTime === null) {
-      lastBeatTimeRef.current = now
-
-      setDebugMetrics({
-        targetMs: targetBeatMs,
-        actualMs: null,
-        diffMs: null,
-        maxDiffMs: maxDiffRef.current,
-        beatCount: beatCountRef.current,
-      })
-
-      return
-    }
-
-    const actualMs = now - previousBeatTime
-    const diffMs = actualMs - targetBeatMs
-    const absoluteDiffMs = Math.abs(diffMs)
-
-    maxDiffRef.current = Math.max(maxDiffRef.current, absoluteDiffMs)
-    lastBeatTimeRef.current = now
-
-    setDebugMetrics({
-      targetMs: targetBeatMs,
-      actualMs,
-      diffMs,
-      maxDiffMs: maxDiffRef.current,
-      beatCount: beatCountRef.current,
-    })
-  }, [targetBeatMs])
-
-  const { ensureAudioContext } = useAudioPulse({
+  const { ensureAudioContext, getElapsedTime } = useAudioPulse({
     isRunning,
     isAudioEnabled,
     beatDuration,
@@ -745,12 +688,85 @@ function App() {
     clickSound,
     clickSubdivision,
     volumeRatio,
-    targetBeatMs,
-    updateDebugMetrics,
-    setSmallRippleKey,
-    setCurrentBeat,
-    setLargeRippleKey,
   })
+
+  useEffect(() => {
+    if (!isRunning) return
+    let frameId: number
+    const loop = () => {
+      forceFrame(n => n + 1)
+      frameId = requestAnimationFrame(loop)
+    }
+    frameId = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(frameId)
+  }, [isRunning])
+
+  const elapsedTime = getElapsedTime()
+
+  const beatIndex = elapsedTime > 0 ? Math.floor(elapsedTime / beatDuration) : 0
+  const currentBeat = beatsPerBar === 1 ? 0 : beatIndex % beatsPerBar
+  const isBarHead = timeSignature !== 'Free' && currentBeat === 0
+
+  const sweepProgress = elapsedTime > 0 ? (elapsedTime % (beatDuration * beatsPerBar)) / (beatDuration * beatsPerBar) : 0
+  const sweepLeft = timeSignature === 'Free' ? 7 : 7 + sweepProgress * 86
+
+  // 【新設計】Ghostの寿命を秒数（絶対時間）で厳格に管理
+  const getGhostLifeTime = (vEffect: VisualEffect, isBar: boolean) => {
+    if (vEffect === 'Ghost Sweep') return isBar ? 7.0 : 4.0;
+    return isBar ? 2.0 : 1.2;
+  }
+
+  const ghosts = useMemo<{
+    id: number
+    left: number
+    isBar: boolean
+    progress: number
+  }[]>(() => {
+    if (!isRunning || elapsedTime === 0 || (visualEffect !== 'Line Sweep' && visualEffect !== 'Ghost Sweep')) return []
+
+    const generated: {
+      id: number
+      left: number
+      isBar: boolean
+      progress: number
+    }[] = []
+    
+    const exactBeat = elapsedTime / beatDuration
+    let i = beatIndex
+
+    // 探索する最大過去拍数（最大寿命7.0秒を担保）
+    const maxSearchBeats = Math.ceil(7.0 / beatDuration) + 1
+
+    while (i > beatIndex - maxSearchBeats && i >= 0) {
+      const beatInBar = beatsPerBar === 1 ? 0 : i % beatsPerBar
+      const isBar = timeSignature !== 'Free' && beatInBar === 0
+      
+      const ageSeconds = (exactBeat - i) * beatDuration
+      const lifeTime = getGhostLifeTime(visualEffect, isBar)
+      const progress = ageSeconds / lifeTime
+
+      if (progress <= 1) {
+        generated.push({
+          id: i,
+          left: timeSignature === 'Free' ? 7 : 7 + (beatInBar / beatsPerBar) * 86,
+          isBar,
+          progress,
+        })
+        
+        // 【復元】右端（93%）の小節線（Ghost）も生成し、残像を持たせる
+        if (isBar) {
+          generated.push({
+            id: i + 1000000,
+            left: 93,
+            isBar,
+            progress,
+          })
+        }
+      }
+      i -= 1
+    }
+    return generated
+  }, [elapsedTime, beatIndex, visualEffect, isRunning, beatsPerBar, timeSignature, beatDuration])
 
   const turnAudioOn = async () => {
     await ensureAudioContext()
@@ -1130,34 +1146,6 @@ function App() {
   ])
 
   useEffect(() => {
-    resetDebugMetrics()
-  }, [targetBeatMs, timeSignature])
-
-  useEffect(() => {
-    if (!isRunning) {
-      lastBeatTimeRef.current = null
-    } else {
-      setCurrentBeat(0)
-      setSmallRippleKey((key) => key + 1)
-      setLargeRippleKey((key) => key + 1)
-      setGhosts([])
-    }
-  }, [isRunning])
-
-  useEffect(() => {
-    if (timeSignature !== 'Free') {
-      setCurrentBeat(0)
-      setSmallRippleKey((key) => key + 1)
-      setLargeRippleKey((key) => key + 1)
-      setGhosts([])
-    }
-  }, [timeSignature, bpm])
-
-  useEffect(() => {
-    setGhosts([])
-  }, [visualEffect])
-
-  useEffect(() => {
     let hideTimerId: number | undefined
 
     const showUi = () => {
@@ -1206,22 +1194,13 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if ((visualEffect !== 'Line Sweep' && visualEffect !== 'Ghost Sweep') || !isRunning) return
-
-    const isBar = timeSignature !== 'Free' && currentBeat === 0
-    const leftPos = timeSignature === 'Free' ? 7 : 7 + (currentBeat / beatsPerBar) * 86
-
-    setGhosts((prev) => {
-      const next = [...prev]
-      if (isBar) {
-        next.push({ id: smallRippleKey, left: 7, isBar: true })
-        next.push({ id: smallRippleKey + 1000000, left: 93, isBar: true })
-      } else {
-        next.push({ id: smallRippleKey, left: leftPos, isBar: false })
-      }
-      return visualEffect === 'Ghost Sweep' ? next.slice(-32) : next.slice(-12)
-    })
-  }, [smallRippleKey, visualEffect, isRunning, currentBeat, beatsPerBar, timeSignature])
+    if (isRunning && beatIndex > 0) {
+      setDebugMetrics((prev) => ({
+        ...prev,
+        beatCount: beatIndex,
+      }))
+    }
+  }, [beatIndex, isRunning])
 
   return (
     <main
@@ -1244,69 +1223,6 @@ function App() {
         @keyframes sweep-slide {
           0% { left: 7%; }
           100% { left: 93%; }
-        }
-        @keyframes line-sweep-fade {
-          0% { 
-            opacity: 1; 
-            background: rgba(255, 255, 255, 1);
-            box-shadow: 0 0 10px rgba(220, 230, 255, 0.8); 
-          }
-          100% { 
-            opacity: 0; 
-            background: rgba(200, 220, 255, 0.3);
-            box-shadow: 0 0 0px transparent; 
-          }
-        }
-        @keyframes line-sweep-fade-bar {
-          0% { 
-            opacity: 1; 
-            width: 2px; 
-            background: rgba(255, 255, 255, 1);
-            box-shadow: 0 0 15px rgba(220, 230, 255, 1); 
-          }
-          100% { 
-            opacity: 0; 
-            width: 2px; 
-            background: rgba(200, 220, 255, 0.4);
-            box-shadow: 0 0 0px transparent; 
-          }
-        }
-        @keyframes ghost-sweep-fade {
-          0% {
-            opacity: 0.85;
-            background: rgba(230, 238, 255, 0.85);
-            box-shadow: 0 0 10px rgba(210, 225, 255, 0.55);
-          }
-          65% {
-            opacity: 0.16;
-            background: rgba(180, 205, 255, 0.18);
-            box-shadow: 0 0 4px rgba(180, 205, 255, 0.18);
-          }
-          100% {
-            opacity: 0.06;
-            background: rgba(150, 180, 230, 0.08);
-            box-shadow: 0 0 0 transparent;
-          }
-        }
-        @keyframes ghost-sweep-fade-bar {
-          0% {
-            opacity: 1;
-            width: 2px;
-            background: rgba(255, 255, 255, 1);
-            box-shadow: 0 0 16px rgba(220, 230, 255, 0.9);
-          }
-          70% {
-            opacity: 0.22;
-            width: 2px;
-            background: rgba(190, 215, 255, 0.22);
-            box-shadow: 0 0 6px rgba(190, 215, 255, 0.22);
-          }
-          100% {
-            opacity: 0.09;
-            width: 1px;
-            background: rgba(150, 180, 230, 0.1);
-            box-shadow: 0 0 0 transparent;
-          }
         }
         .sweep-container {
           position: absolute;
@@ -1334,19 +1250,56 @@ function App() {
           );
           transform: translateX(-50%);
         }
+
+        /* 【新設計】固定フレームのフラッシュアニメーション */
+        .sweep-line.is-bar-head {
+          animation: sweep-flash 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+          z-index: 10;
+        }
+        @keyframes sweep-flash {
+          0% {
+            background: linear-gradient(
+              to right,
+              transparent,
+              rgba(255, 255, 255, 0.95),
+              rgba(220, 235, 255, 1),
+              rgba(255, 255, 255, 0.95),
+              transparent
+            );
+            opacity: 1;
+            filter: blur(2px);
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.8), 0 0 24px rgba(180, 200, 255, 0.6);
+          }
+          100% {
+            background: linear-gradient(
+              to right,
+              transparent,
+              rgba(255, 255, 255, 0.95),
+              rgba(220, 235, 255, 1),
+              rgba(255, 255, 255, 0.95),
+              transparent
+            );
+            opacity: 0;
+            filter: blur(0px);
+            box-shadow: none;
+          }
+        }
+
         .line-sweep-ghost {
           position: absolute;
           top: 0;
           bottom: 0;
           width: 1px;
-          transform: translateX(-50%);
+          background: rgba(255, 255, 255, 1);
+          transform-origin: center;
         }
         .ghost-sweep-ghost {
           position: absolute;
           top: 0;
           bottom: 0;
           width: 1px;
-          transform: translateX(-50%);
+          background: rgba(230, 238, 255, 0.85);
+          transform-origin: center;
         }
         .score-swipe-layer {
           position: absolute;
@@ -1409,59 +1362,61 @@ function App() {
 
       {isRunning && visualEffect === 'Ripple' && (
         <>
-          <div key={`small-${smallRippleKey}`} className="small-ripple" />
-
-          {timeSignature !== 'Free' && (
-            <div key={`large-${largeRippleKey}`} className="large-ripple" />
+          <div key={`small-${beatIndex}`} className="small-ripple" />
+          {isBarHead && (
+            <div key={`large-${beatIndex}`} className="large-ripple" />
           )}
         </>
       )}
 
-      {isRunning && visualEffect === 'Line Sweep' && (
+      {isRunning && (visualEffect === 'Line Sweep' || visualEffect === 'Ghost Sweep') && (
         <div className="sweep-container">
-          <div
-            key={`sweep-${largeRippleKey}`}
-            className="sweep-line"
-            style={{
-              animation: `sweep-slide ${largeRippleDuration}s linear infinite`
-            }}
-          />
-          {ghosts.map((g) => (
-            <div
-              key={g.id}
-              className="line-sweep-ghost"
-              style={{
-                left: `${g.left}%`,
-                animation: g.isBar
-                  ? 'line-sweep-fade-bar 2.0s ease-out forwards'
-                  : 'line-sweep-fade 1.5s ease-out forwards'
-              }}
-            />
-          ))}
-        </div>
-      )}
+          
+          {/* 【新設計】小節アタマの芯を定義する、固定位置のフラッシュ専用ライン */}
+          {isBarHead && (
+            <>
+              <div
+                key={`flash-left-${beatIndex}`}
+                className="sweep-line is-bar-head"
+                style={{ left: '7%' }}
+              />
+              <div
+                key={`flash-right-${beatIndex}`}
+                className="sweep-line is-bar-head"
+                style={{ left: '93%' }}
+              />
+            </>
+          )}
 
-      {isRunning && visualEffect === 'Ghost Sweep' && (
-        <div className="sweep-container">
+          {/* 常に動き続ける主線 */}
           <div
-            key={`sweep-${largeRippleKey}`}
+            key="sweep-line-main"
             className="sweep-line"
             style={{
-              animation: `sweep-slide ${largeRippleDuration}s linear infinite`
+              left: `${sweepLeft}%`,
+              animation: 'none'
             }}
           />
-          {ghosts.map((g) => (
-            <div
-              key={g.id}
-              className="ghost-sweep-ghost"
-              style={{
-                left: `${g.left}%`,
-                animation: g.isBar
-                  ? 'ghost-sweep-fade-bar 7.0s cubic-bezier(0.2, 0.7, 0.3, 1) forwards'
-                  : 'ghost-sweep-fade 5.0s cubic-bezier(0.2, 0.7, 0.3, 1) forwards'
-              }}
-            />
-          ))}
+
+          {/* 寿命とカーブを調整し、散らからずに美しく消えるGhost群 */}
+          {ghosts.map((g) => {
+            const baseOpacity = g.isBar ? 1 : (visualEffect === 'Ghost Sweep' ? 0.4 : 0.25);
+            const fadeCurve = g.isBar ? Math.pow(1 - g.progress, 1.2) : Math.pow(1 - g.progress, 2.5);
+
+            return (
+              <div
+                key={g.id}
+                className={visualEffect === 'Ghost Sweep' ? "ghost-sweep-ghost" : "line-sweep-ghost"}
+                style={{
+                  left: `${g.left}%`,
+                  opacity: Math.max(0, baseOpacity * fadeCurve),
+                  transform: `translateX(-50%) scaleX(${1 + g.progress * (g.isBar ? 2.5 : 1.0)})`,
+                  filter: `blur(${g.progress * (g.isBar ? 6 : 3)}px)`,
+                  animation: 'none'
+                }}
+              />
+            )
+          })}
         </div>
       )}
 
@@ -1920,21 +1875,9 @@ function App() {
       {isDebugEnabled && (
         <div className="debug-panel ui-panel">
           <span>Debug</span>
-          <span>Target {debugMetrics.targetMs.toFixed(1)}ms</span>
-          <span>
-            Actual{' '}
-            {debugMetrics.actualMs === null
-              ? '--'
-              : `${debugMetrics.actualMs.toFixed(1)}ms`}
-          </span>
-          <span>
-            Diff{' '}
-            {debugMetrics.diffMs === null
-              ? '--'
-              : `${debugMetrics.diffMs >= 0 ? '+' : ''}${debugMetrics.diffMs.toFixed(1)}ms`}
-          </span>
-          <span>Max ±{debugMetrics.maxDiffMs.toFixed(1)}ms</span>
-          <span>Count {debugMetrics.beatCount}</span>
+          <span>Actual Sync Mode: Absolute Ref + forceFrame</span>
+          <span>Elapsed: {(elapsedTime).toFixed(2)}s</span>
+          <span>Beat Count: {debugMetrics.beatCount}</span>
         </div>
       )}
     </main>
