@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, CSSProperties, PointerEvent } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent, CSSProperties } from 'react'
 
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
@@ -53,9 +53,9 @@ const saveSlotToDB = async (
   fileName: string,
   pageNumber: number,
   pageCount: number
-) => {
+): Promise<void> => {
   const db = await openDB()
-  return new Promise<void>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
     store.put({ slotIndex, pdfData, fileName, pageNumber, pageCount })
@@ -75,9 +75,9 @@ const loadSlotsFromDB = async (): Promise<any[]> => {
   })
 }
 
-const updateSlotPageInDB = async (slotIndex: number, pageNumber: number) => {
+const updateSlotPageInDB = async (slotIndex: number, pageNumber: number): Promise<void> => {
   const db = await openDB()
-  return new Promise<void>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
     const request = store.get(slotIndex)
@@ -93,9 +93,9 @@ const updateSlotPageInDB = async (slotIndex: number, pageNumber: number) => {
   })
 }
 
-const clearPdfSlotsFromDB = async () => {
+const clearPdfSlotsFromDB = async (): Promise<void> => {
   const db = await openDB()
-  return new Promise<void>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
     store.clear()
@@ -356,14 +356,14 @@ function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs:
   const startPos = useRef<{ x: number; y: number; time: number } | null>(null)
   const isCooldown = useRef(false)
 
-  const onPointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
+  const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
     if (!event.isPrimary) return
     const target = event.target as HTMLElement
     if (target.closest('button, input, select, textarea, .ui-panel, .slider-control, .compact-control')) return
     startPos.current = { x: event.clientX, y: event.clientY, time: Date.now() }
   }, [])
 
-  const onPointerUp = useCallback((event: PointerEvent<HTMLElement>) => {
+  const onPointerUp = useCallback((event: React.PointerEvent<HTMLElement>) => {
     if (!event.isPrimary || !startPos.current || isCooldown.current) {
       startPos.current = null
       return
@@ -399,7 +399,7 @@ function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs:
 function App() {
   const [settings, setSettings] = useState<SavedSettings>(() => loadSettings())
 
-  const [isRunning, setIsRunning] = useState(false) // 初期状態は停止
+  const [isRunning, setIsRunning] = useState(false)
   const [isAudioEnabled, setIsAudioEnabled] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isUiVisible, setIsUiVisible] = useState(true)
@@ -781,17 +781,13 @@ function App() {
   const executeZanshinTransition = useCallback(async () => {
     if (tunePhase !== 'idle') return
 
-    // Step 1: 0.0s - 中央へ吸収、UIフェードアウト開始
     setTunePhase('absorb')
-    // DSPリソースを即座に破棄（アンチポップはGainNodeで処理済みの前提）
     await stopTuner()
 
-    // Step 3: 0.3s - 縦線が展開し、キャンバスがフェードイン
     setTimeout(() => {
       setTunePhase('expand')
     }, 300)
 
-    // 0.8s: トランジション完了、Voidモードへ完全移行（静かな状態で復帰）
     setTimeout(() => {
       setScoreRenderMode('void')
       setTunePhase('idle')
@@ -1226,7 +1222,7 @@ function App() {
   }, [beatIndex, isRunning])
 
   const tuneCanvasBrightness = Math.max(0.1, 1 - Math.abs(tuneData.distance))
-  const tuneY = tuneData.distance * 150 // max 150px displacement
+  const tuneY = tuneData.distance * 150
   const tuneTime = performance.now() / 1000
   const centerWobble = tuneData.isStable ? (Math.sin(tuneTime * 0.35) * 3 + Math.sin(tuneTime * 0.5) * 0.15) : 0
   const finalTuneY = tuneY + centerWobble
@@ -1234,6 +1230,7 @@ function App() {
   return (
     <main
       className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'} score-${scoreRenderMode}-mode phase-${tunePhase}`}
+      {...swipeHandlers}
       style={
         {
           '--beat-duration': `${beatDuration}s`,
@@ -1297,17 +1294,6 @@ function App() {
       >
         <canvas ref={scoreCanvasRef} />
       </div>
-
-      {isScoreVisible && isPdfLoaded && scoreRenderMode !== 'tune' && (
-        <div
-          className="score-swipe-layer"
-          {...swipeHandlers}
-          style={{
-            touchAction: 'none',
-            overscrollBehavior: 'contain',
-          }}
-        />
-      )}
 
       {isRunning && visualEffect === 'Ripple' && (
         <>

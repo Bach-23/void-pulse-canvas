@@ -20,11 +20,15 @@ body {
   position: relative;
   background: #050608;
   overflow-x: hidden;
+  
+  /* --- 究極の安全設計（セーフティ中央揃えベース） --- */
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  height: 100vh;
+  justify-content: flex-start; /* 溢れた時は必ず上から */
+  min-height: 100vh; /* 最低限画面サイズを確保し、溢れたら拡張を許す */
+  padding: 0;
+  touch-action: none; /* Safariのネイティブスクロール・スワイプ横取りを完全封殺 */
 }
 
 .background {
@@ -129,7 +133,7 @@ body {
 }
 
 /* =========================================
-   Sweep Animations & Ghosts (復元部分)
+   Sweep Animations & Ghosts
    ========================================= */
 .sweep-container {
   position: absolute;
@@ -211,14 +215,6 @@ body {
   transform-origin: center;
 }
 
-.score-swipe-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
-
 .score-plain-mode .score-overlay {
   mix-blend-mode: normal !important;
 }
@@ -239,6 +235,10 @@ body {
   width: min(960px, 94vw);
   text-align: center;
   padding: 44px;
+  
+  /* --- 究極の安全設計（セーフティ中央揃えの要） --- */
+  margin: auto 0; /* 空白時は上下中央に留まり、溢れたら上詰めになる魔法のマージン */
+  
   backdrop-filter: blur(2px);
   transition:
     opacity 500ms ease,
