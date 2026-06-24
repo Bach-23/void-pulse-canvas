@@ -7,6 +7,7 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker?url'
 
 import { useAudioPulse } from './hooks/useAudioPulse'
+import { useVoidTune } from './hooks/useVoidTune'
 import type {
   TimeSignature,
   ClickSound,
@@ -398,14 +399,15 @@ function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs:
 function App() {
   const [settings, setSettings] = useState<SavedSettings>(() => loadSettings())
 
-  const [isRunning, setIsRunning] = useState(true)
+  const [isRunning, setIsRunning] = useState(false) // 初期状態は停止
   const [isAudioEnabled, setIsAudioEnabled] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isUiVisible, setIsUiVisible] = useState(true)
 
   const [, forceFrame] = useState(0)
 
-  const [scoreRenderMode, setScoreRenderMode] = useState<'void' | 'plain'>('void')
+  const [scoreRenderMode, setScoreRenderMode] = useState<'void' | 'plain' | 'tune'>('void')
+  const [tunePhase, setTunePhase] = useState<'idle' | 'absorb' | 'expand'>('idle')
 
   const [isScoreImageLoaded, setIsScoreImageLoaded] = useState(false)
   const [scoreImageSource, setScoreImageSource] = useState(
@@ -690,8 +692,10 @@ function App() {
     volumeRatio,
   })
 
+  const { startTuner, stopTuner, tuneData } = useVoidTune()
+
   useEffect(() => {
-    if (!isRunning) return
+    if (!isRunning && scoreRenderMode !== 'tune') return
     let frameId: number
     const loop = () => {
       forceFrame(n => n + 1)
@@ -699,7 +703,7 @@ function App() {
     }
     frameId = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(frameId)
-  }, [isRunning])
+  }, [isRunning, scoreRenderMode])
 
   const elapsedTime = getElapsedTime()
 
@@ -710,7 +714,6 @@ function App() {
   const sweepProgress = elapsedTime > 0 ? (elapsedTime % (beatDuration * beatsPerBar)) / (beatDuration * beatsPerBar) : 0
   const sweepLeft = timeSignature === 'Free' ? 7 : 7 + sweepProgress * 86
 
-  // 【新設計】Ghostの寿命を秒数（絶対時間）で厳格に管理
   const getGhostLifeTime = (vEffect: VisualEffect, isBar: boolean) => {
     if (vEffect === 'Ghost Sweep') return isBar ? 7.0 : 4.0;
     return isBar ? 2.0 : 1.2;
@@ -734,7 +737,6 @@ function App() {
     const exactBeat = elapsedTime / beatDuration
     let i = beatIndex
 
-    // 探索する最大過去拍数（最大寿命7.0秒を担保）
     const maxSearchBeats = Math.ceil(7.0 / beatDuration) + 1
 
     while (i > beatIndex - maxSearchBeats && i >= 0) {
@@ -753,7 +755,6 @@ function App() {
           progress,
         })
         
-        // 【復元】右端（93%）の小節線（Ghost）も生成し、残像を持たせる
         if (isBar) {
           generated.push({
             id: i + 1000000,
@@ -776,6 +777,28 @@ function App() {
   const turnAudioOff = () => {
     setIsAudioEnabled(false)
   }
+
+  const executeZanshinTransition = useCallback(async () => {
+    if (tunePhase !== 'idle') return
+
+    // Step 1: 0.0s - 中央へ吸収、UIフェードアウト開始
+    setTunePhase('absorb')
+    // DSPリソースを即座に破棄（アンチポップはGainNodeで処理済みの前提）
+    await stopTuner()
+
+    // Step 3: 0.3s - 縦線が展開し、キャンバスがフェードイン
+    setTimeout(() => {
+      setTunePhase('expand')
+    }, 300)
+
+    // 0.8s: トランジション完了、Voidモードへ完全移行（静かな状態で復帰）
+    setTimeout(() => {
+      setScoreRenderMode('void')
+      setTunePhase('idle')
+      setIsRunning(false)
+      turnAudioOff()
+    }, 800)
+  }, [stopTuner, tunePhase])
 
   const toggleFullscreen = async () => {
     const docEl = document.documentElement as any
@@ -1202,9 +1225,15 @@ function App() {
     }
   }, [beatIndex, isRunning])
 
+  const tuneCanvasBrightness = Math.max(0.1, 1 - Math.abs(tuneData.distance))
+  const tuneY = tuneData.distance * 150 // max 150px displacement
+  const tuneTime = performance.now() / 1000
+  const centerWobble = tuneData.isStable ? (Math.sin(tuneTime * 0.35) * 3 + Math.sin(tuneTime * 0.5) * 0.15) : 0
+  const finalTuneY = tuneY + centerWobble
+
   return (
     <main
-      className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'} score-${scoreRenderMode}-mode`}
+      className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'} score-${scoreRenderMode}-mode phase-${tunePhase}`}
       style={
         {
           '--beat-duration': `${beatDuration}s`,
@@ -1216,109 +1245,11 @@ function App() {
           '--score-scale': scoreScaleRatio,
           '--score-x': `${scoreX}px`,
           '--score-y': `${scoreY}px`,
+          '--tune-y': `${finalTuneY}px`,
+          '--tune-brightness': tuneCanvasBrightness
         } as CSSProperties
       }
     >
-      <style>{`
-        @keyframes sweep-slide {
-          0% { left: 7%; }
-          100% { left: 93%; }
-        }
-        .sweep-container {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          pointer-events: none;
-          z-index: 5;
-          overflow: hidden;
-          mix-blend-mode: screen;
-        }
-        .sweep-line {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          width: 2px;
-          background: linear-gradient(
-            to right,
-            transparent,
-            rgba(200, 220, 255, 0.25),
-            rgba(200, 220, 255, 0.45),
-            rgba(200, 220, 255, 0.25),
-            transparent
-          );
-          transform: translateX(-50%);
-        }
-
-        /* 【新設計】固定フレームのフラッシュアニメーション */
-        .sweep-line.is-bar-head {
-          animation: sweep-flash 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-          z-index: 10;
-        }
-        @keyframes sweep-flash {
-          0% {
-            background: linear-gradient(
-              to right,
-              transparent,
-              rgba(255, 255, 255, 0.95),
-              rgba(220, 235, 255, 1),
-              rgba(255, 255, 255, 0.95),
-              transparent
-            );
-            opacity: 1;
-            filter: blur(2px);
-            box-shadow: 0 0 12px rgba(255, 255, 255, 0.8), 0 0 24px rgba(180, 200, 255, 0.6);
-          }
-          100% {
-            background: linear-gradient(
-              to right,
-              transparent,
-              rgba(255, 255, 255, 0.95),
-              rgba(220, 235, 255, 1),
-              rgba(255, 255, 255, 0.95),
-              transparent
-            );
-            opacity: 0;
-            filter: blur(0px);
-            box-shadow: none;
-          }
-        }
-
-        .line-sweep-ghost {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          width: 1px;
-          background: rgba(255, 255, 255, 1);
-          transform-origin: center;
-        }
-        .ghost-sweep-ghost {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          width: 1px;
-          background: rgba(230, 238, 255, 0.85);
-          transform-origin: center;
-        }
-        .score-swipe-layer {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-        }
-        .score-plain-mode .score-overlay {
-          mix-blend-mode: normal !important;
-        }
-        .score-plain-mode .score-overlay canvas {
-          mix-blend-mode: normal !important;
-          filter: none !important;
-          opacity: 1 !important;
-          background-color: #ffffff;
-        }
-      `}</style>
-
       <input
         ref={scoreFileInputRef}
         type="file"
@@ -1340,16 +1271,34 @@ function App() {
         style={backgroundInlineStyle}
       />
 
+      {scoreRenderMode === 'tune' && (
+        <div className={`tune-container ${tunePhase}`}>
+          <div className="tune-side-line left" />
+          <div className="tune-side-line right" />
+          <div className="tune-center-line" />
+          
+          <div className="tune-note-display">
+            {tuneData.noteName !== '--' && <span>{tuneData.noteName}</span>}
+          </div>
+
+          <div className="tune-particle-layer">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={`p-${i}`} className="tune-particle" style={{ animationDelay: `${i * 0.4}s` }} />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div
         className="score-overlay"
         style={{
-          opacity: isScoreVisible ? (scoreRenderMode === 'plain' ? 1 : undefined) : 0,
+          opacity: isScoreVisible && scoreRenderMode !== 'tune' ? (scoreRenderMode === 'plain' ? 1 : undefined) : 0,
         }}
       >
         <canvas ref={scoreCanvasRef} />
       </div>
 
-      {isScoreVisible && isPdfLoaded && (
+      {isScoreVisible && isPdfLoaded && scoreRenderMode !== 'tune' && (
         <div
           className="score-swipe-layer"
           {...swipeHandlers}
@@ -1371,8 +1320,6 @@ function App() {
 
       {isRunning && (visualEffect === 'Line Sweep' || visualEffect === 'Ghost Sweep') && (
         <div className="sweep-container">
-          
-          {/* 【新設計】小節アタマの芯を定義する、固定位置のフラッシュ専用ライン */}
           {isBarHead && (
             <>
               <div
@@ -1388,7 +1335,6 @@ function App() {
             </>
           )}
 
-          {/* 常に動き続ける主線 */}
           <div
             key="sweep-line-main"
             className="sweep-line"
@@ -1398,7 +1344,6 @@ function App() {
             }}
           />
 
-          {/* 寿命とカーブを調整し、散らからずに美しく消えるGhost群 */}
           {ghosts.map((g) => {
             const baseOpacity = g.isBar ? 1 : (visualEffect === 'Ghost Sweep' ? 0.4 : 0.25);
             const fadeCurve = g.isBar ? Math.pow(1 - g.progress, 1.2) : Math.pow(1 - g.progress, 2.5);
@@ -1430,421 +1375,449 @@ function App() {
         </p>
 
         <div className="primary-action-row">
-          <button
-            className={`pulse-button ${isRunning ? 'is-active' : ''}`}
-            onClick={() => setIsRunning(!isRunning)}
-          >
-            {isRunning ? 'Pulse Stop' : 'Pulse Start'}
-          </button>
+          {scoreRenderMode === 'tune' ? (
+            <button
+              className={`pulse-button is-active`}
+              onClick={executeZanshinTransition}
+            >
+              {tuneData.isStable ? 'Enter Void' : 'Force Enter Void'}
+            </button>
+          ) : (
+            <>
+              <button
+                className={`pulse-button ${isRunning ? 'is-active' : ''}`}
+                onClick={() => setIsRunning(!isRunning)}
+              >
+                {isRunning ? 'Pulse Stop' : 'Pulse Start'}
+              </button>
+
+              {!isRunning && (
+                <button
+                  className="pulse-button"
+                  style={{ marginLeft: '16px' }}
+                  onClick={() => {
+                    setScoreRenderMode('tune')
+                    startTuner()
+                  }}
+                >
+                  Void Tune
+                </button>
+              )}
+            </>
+          )}
         </div>
 
-        <div className="secondary-controls">
-          <label className="compact-control">
-            <span>BPM</span>
-            <input
-              type="number"
-              min="30"
-              max="240"
-              value={bpm}
-              onChange={(event) =>
-                updateSettings({ bpm: Number(event.target.value) })
-              }
-            />
-          </label>
+        {scoreRenderMode !== 'tune' && (
+          <>
+            <div className="secondary-controls">
+              <label className="compact-control">
+                <span>BPM</span>
+                <input
+                  type="number"
+                  min="30"
+                  max="240"
+                  value={bpm}
+                  onChange={(event) =>
+                    updateSettings({ bpm: Number(event.target.value) })
+                  }
+                />
+              </label>
 
-          <label className="compact-control">
-            <span>Meter</span>
-            <select
-              value={timeSignature}
-              onChange={(event) =>
-                updateSettings({
-                  timeSignature: event.target.value as TimeSignature,
-                })
-              }
-            >
-              <option value="2/4">2/4</option>
-              <option value="3/4">3/4</option>
-              <option value="4/4">4/4</option>
-              <option value="Free">Free</option>
-            </select>
-          </label>
+              <label className="compact-control">
+                <span>Meter</span>
+                <select
+                  value={timeSignature}
+                  onChange={(event) =>
+                    updateSettings({
+                      timeSignature: event.target.value as TimeSignature,
+                    })
+                  }
+                >
+                  <option value="2/4">2/4</option>
+                  <option value="3/4">3/4</option>
+                  <option value="4/4">4/4</option>
+                  <option value="Free">Free</option>
+                </select>
+              </label>
 
-          <label className="compact-control sound-control">
-            <span>Sound</span>
-            <select
-              value={clickSound}
-              onChange={(event) =>
-                updateSettings({
-                  clickSound: event.target.value as ClickSound,
-                })
-              }
-            >
-              {clickSoundOptions.map((sound) => (
-                <option key={sound} value={sound}>
-                  {sound}
-                </option>
-              ))}
-            </select>
-          </label>
+              <label className="compact-control sound-control">
+                <span>Sound</span>
+                <select
+                  value={clickSound}
+                  onChange={(event) =>
+                    updateSettings({
+                      clickSound: event.target.value as ClickSound,
+                    })
+                  }
+                >
+                  {clickSoundOptions.map((sound) => (
+                    <option key={sound} value={sound}>
+                      {sound}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <label className="compact-control sound-control">
-            <span>Click</span>
-            <select
-              value={clickSubdivision}
-              onChange={(event) =>
-                updateSettings({
-                  clickSubdivision: event.target.value as ClickSubdivision,
-                })
-              }
-            >
-              {clickSubdivisionOptions.map((subdivision) => (
-                <option key={subdivision} value={subdivision}>
-                  {subdivision}
-                </option>
-              ))}
-            </select>
-          </label>
+              <label className="compact-control sound-control">
+                <span>Click</span>
+                <select
+                  value={clickSubdivision}
+                  onChange={(event) =>
+                    updateSettings({
+                      clickSubdivision: event.target.value as ClickSubdivision,
+                    })
+                  }
+                >
+                  {clickSubdivisionOptions.map((subdivision) => (
+                    <option key={subdivision} value={subdivision}>
+                      {subdivision}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <label className="compact-control sound-control">
-            <span>Preset</span>
-            <select
-              value={selectedPreset}
-              onChange={(event) =>
-                updateSettings({
-                  selectedPreset: event.target.value as PresetName,
-                })
-              }
-            >
-              {presetOptions.map((preset) => (
-                <option key={preset} value={preset}>
-                  {preset}
-                </option>
-              ))}
-            </select>
-          </label>
+              <label className="compact-control sound-control">
+                <span>Preset</span>
+                <select
+                  value={selectedPreset}
+                  onChange={(event) =>
+                    updateSettings({
+                      selectedPreset: event.target.value as PresetName,
+                    })
+                  }
+                >
+                  {presetOptions.map((preset) => (
+                    <option key={preset} value={preset}>
+                      {preset}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <label className="compact-control sound-control">
-            <span>Background</span>
-            <select
-              value={backgroundMode}
-              onChange={(event) =>
-                updateSettings({
-                  backgroundMode: event.target.value as BackgroundMode,
-                })
-              }
-            >
-              {backgroundModeOptions.map((mode) => (
-                <option key={mode} value={mode}>
-                  {mode}
-                </option>
-              ))}
-            </select>
-          </label>
+              <label className="compact-control sound-control">
+                <span>Background</span>
+                <select
+                  value={backgroundMode}
+                  onChange={(event) =>
+                    updateSettings({
+                      backgroundMode: event.target.value as BackgroundMode,
+                    })
+                  }
+                >
+                  {backgroundModeOptions.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {mode}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <label className="compact-control sound-control">
-            <span>Effect</span>
-            <select
-              value={visualEffect}
-              onChange={(event) =>
-                updateSettings({
-                  visualEffect: event.target.value as VisualEffect,
-                })
-              }
-            >
-              {visualEffectOptions.map((effect) => (
-                <option key={effect} value={effect}>
-                  {effect}
-                </option>
-              ))}
-            </select>
-          </label>
+              <label className="compact-control sound-control">
+                <span>Effect</span>
+                <select
+                  value={visualEffect}
+                  onChange={(event) =>
+                    updateSettings({
+                      visualEffect: event.target.value as VisualEffect,
+                    })
+                  }
+                >
+                  {visualEffectOptions.map((effect) => (
+                    <option key={effect} value={effect}>
+                      {effect}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <label className="compact-control sound-control">
-            <span>Score Mode</span>
-            <select
-              value={scoreRenderMode}
-              onChange={(event) =>
-                setScoreRenderMode(event.target.value as 'void' | 'plain')
-              }
-            >
-              <option value="void">Void</option>
-              <option value="plain">Plain</option>
-            </select>
-          </label>
+              <label className="compact-control sound-control">
+                <span>Score Mode</span>
+                <select
+                  value={scoreRenderMode}
+                  onChange={(event) =>
+                    setScoreRenderMode(event.target.value as 'void' | 'plain')
+                  }
+                >
+                  <option value="void">Void</option>
+                  <option value="plain">Plain</option>
+                </select>
+              </label>
 
-          <label className="compact-control sound-control">
-            <span>PDF Slot</span>
-            <select
-              value={activePdfSlotIndex}
-              onChange={(event) => void activatePdfSlot(Number(event.target.value))}
-            >
-              {pdfSlots.map((slot, index) => (
-                <option key={index} value={index}>
-                  {`Slot ${index + 1}${slot.fileName ? ` / ${slot.fileName}` : ''}`}
-                </option>
-              ))}
-            </select>
-          </label>
+              <label className="compact-control sound-control">
+                <span>PDF Slot</span>
+                <select
+                  value={activePdfSlotIndex}
+                  onChange={(event) => void activatePdfSlot(Number(event.target.value))}
+                >
+                  {pdfSlots.map((slot, index) => (
+                    <option key={index} value={index}>
+                      {`Slot ${index + 1}${slot.fileName ? ` / ${slot.fileName}` : ''}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <div className="score-switch-group">
-            <button className="score-switch" onClick={applyPreset}>
-              Apply
-            </button>
+              <div className="score-switch-group">
+                <button className="score-switch" onClick={applyPreset}>
+                  Apply
+                </button>
 
-            <button className="score-switch" onClick={saveCurrentPreset}>
-              Save Current
-            </button>
-          </div>
+                <button className="score-switch" onClick={saveCurrentPreset}>
+                  Save Current
+                </button>
+              </div>
 
-          <div className="score-switch-group">
-            <button
-              className={`score-switch ${isFullscreen ? 'is-active' : ''}`}
-              onClick={toggleFullscreen}
-            >
-              {isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-            </button>
-          </div>
+              <div className="score-switch-group">
+                <button
+                  className={`score-switch ${isFullscreen ? 'is-active' : ''}`}
+                  onClick={toggleFullscreen}
+                >
+                  {isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                </button>
+              </div>
 
-          <div className="audio-switch-group">
-            <button
-              className={`audio-switch ${isAudioEnabled ? 'is-active' : ''}`}
-              onClick={turnAudioOn}
-            >
-              Audio ON
-            </button>
+              <div className="audio-switch-group">
+                <button
+                  className={`audio-switch ${isAudioEnabled ? 'is-active' : ''}`}
+                  onClick={turnAudioOn}
+                >
+                  Audio ON
+                </button>
 
-            <button
-              className={`audio-switch ${!isAudioEnabled ? 'is-active' : ''}`}
-              onClick={turnAudioOff}
-            >
-              Audio OFF
-            </button>
-          </div>
+                <button
+                  className={`audio-switch ${!isAudioEnabled ? 'is-active' : ''}`}
+                  onClick={turnAudioOff}
+                >
+                  Audio OFF
+                </button>
+              </div>
 
-          <div className="debug-switch-group">
-            <button
-              className={`debug-switch ${isDebugEnabled ? 'is-active' : ''}`}
-              onClick={() => updateSettings({ isDebugEnabled: true })}
-            >
-              Debug ON
-            </button>
+              <div className="debug-switch-group">
+                <button
+                  className={`debug-switch ${isDebugEnabled ? 'is-active' : ''}`}
+                  onClick={() => updateSettings({ isDebugEnabled: true })}
+                >
+                  Debug ON
+                </button>
 
-            <button
-              className={`debug-switch ${!isDebugEnabled ? 'is-active' : ''}`}
-              onClick={() => updateSettings({ isDebugEnabled: false })}
-            >
-              Debug OFF
-            </button>
-          </div>
+                <button
+                  className={`debug-switch ${!isDebugEnabled ? 'is-active' : ''}`}
+                  onClick={() => updateSettings({ isDebugEnabled: false })}
+                >
+                  Debug OFF
+                </button>
+              </div>
 
-          <div className="score-switch-group">
-            <button
-              className={`score-switch ${isScoreVisible ? 'is-active' : ''}`}
-              onClick={() => updateSettings({ isScoreVisible: true })}
-            >
-              Score ON
-            </button>
+              <div className="score-switch-group">
+                <button
+                  className={`score-switch ${isScoreVisible ? 'is-active' : ''}`}
+                  onClick={() => updateSettings({ isScoreVisible: true })}
+                >
+                  Score ON
+                </button>
 
-            <button
-              className={`score-switch ${!isScoreVisible ? 'is-active' : ''}`}
-              onClick={() => updateSettings({ isScoreVisible: false })}
-            >
-              Score OFF
-            </button>
+                <button
+                  className={`score-switch ${!isScoreVisible ? 'is-active' : ''}`}
+                  onClick={() => updateSettings({ isScoreVisible: false })}
+                >
+                  Score OFF
+                </button>
 
-            <button
-              className="score-switch"
-              onClick={() => scoreFileInputRef.current?.click()}
-            >
-              Load PNG
-            </button>
+                <button
+                  className="score-switch"
+                  onClick={() => scoreFileInputRef.current?.click()}
+                >
+                  Load PNG
+                </button>
 
-            <button
-              className="score-switch"
-              onClick={() => scorePdfInputRef.current?.click()}
-            >
-              Load PDF
-            </button>
+                <button
+                  className="score-switch"
+                  onClick={() => scorePdfInputRef.current?.click()}
+                >
+                  Load PDF
+                </button>
 
-            <button
-              className="score-switch"
-              disabled={!isPdfLoaded || pdfPageNumber <= 1}
-              onClick={showPreviousPdfPage}
-            >
-              PDF Prev
-            </button>
+                <button
+                  className="score-switch"
+                  disabled={!isPdfLoaded || pdfPageNumber <= 1}
+                  onClick={showPreviousPdfPage}
+                >
+                  PDF Prev
+                </button>
 
-            <button
-              className="score-switch"
-              disabled={!isPdfLoaded || pdfPageNumber >= pdfPageCount}
-              onClick={showNextPdfPage}
-            >
-              PDF Next
-            </button>
-          </div>
-        </div>
+                <button
+                  className="score-switch"
+                  disabled={!isPdfLoaded || pdfPageNumber >= pdfPageCount}
+                  onClick={showNextPdfPage}
+                >
+                  PDF Next
+                </button>
+              </div>
+            </div>
 
-        <div className="sliders">
-          <label className="slider-control">
-            <span>Volume</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={volume}
-              onChange={(event) =>
-                updateSettings({
-                  volume: Number(event.target.value),
-                })
-              }
-            />
-            <em>{volume}</em>
-          </label>
+            <div className="sliders">
+              <label className="slider-control">
+                <span>Volume</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={volume}
+                  onChange={(event) =>
+                    updateSettings({
+                      volume: Number(event.target.value),
+                    })
+                  }
+                />
+                <em>{volume}</em>
+              </label>
 
-          <label className="slider-control">
-            <span>Breath</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={breathIntensity}
-              onChange={(event) =>
-                updateSettings({
-                  breathIntensity: Number(event.target.value),
-                })
-              }
-            />
-            <em>{breathIntensity}</em>
-          </label>
+              <label className="slider-control">
+                <span>Breath</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={breathIntensity}
+                  onChange={(event) =>
+                    updateSettings({
+                      breathIntensity: Number(event.target.value),
+                    })
+                  }
+                />
+                <em>{breathIntensity}</em>
+              </label>
 
-          <label className="slider-control">
-            <span>Small</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={smallRippleIntensity}
-              onChange={(event) =>
-                updateSettings({
-                  smallRippleIntensity: Number(event.target.value),
-                })
-              }
-            />
-            <em>{smallRippleIntensity}</em>
-          </label>
+              <label className="slider-control">
+                <span>Small</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={smallRippleIntensity}
+                  onChange={(event) =>
+                    updateSettings({
+                      smallRippleIntensity: Number(event.target.value),
+                    })
+                  }
+                />
+                <em>{smallRippleIntensity}</em>
+              </label>
 
-          <label className="slider-control">
-            <span>Large</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={largeRippleIntensity}
-              onChange={(event) =>
-                updateSettings({
-                  largeRippleIntensity: Number(event.target.value),
-                })
-              }
-            />
-            <em>{largeRippleIntensity}</em>
-          </label>
+              <label className="slider-control">
+                <span>Large</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={largeRippleIntensity}
+                  onChange={(event) =>
+                    updateSettings({
+                      largeRippleIntensity: Number(event.target.value),
+                    })
+                  }
+                />
+                <em>{largeRippleIntensity}</em>
+              </label>
 
-          <label className="slider-control">
-            <span>Score Visibility</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={scoreOpacity}
-              onChange={(event) =>
-                updateSettings({
-                  scoreOpacity: Number(event.target.value),
-                })
-              }
-            />
-            <em>{scoreOpacity}</em>
-          </label>
+              <label className="slider-control">
+                <span>Score Visibility</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={scoreOpacity}
+                  onChange={(event) =>
+                    updateSettings({
+                      scoreOpacity: Number(event.target.value),
+                    })
+                  }
+                />
+                <em>{scoreOpacity}</em>
+              </label>
 
-          <label className="slider-control">
-            <span>Score Size</span>
-            <input
-              type="range"
-              min="20"
-              max="160"
-              value={scoreScale}
-              onChange={(event) =>
-                updateSettings({
-                  scoreScale: Number(event.target.value),
-                })
-              }
-            />
-            <em>{scoreScale}</em>
-          </label>
+              <label className="slider-control">
+                <span>Score Size</span>
+                <input
+                  type="range"
+                  min="20"
+                  max="160"
+                  value={scoreScale}
+                  onChange={(event) =>
+                    updateSettings({
+                      scoreScale: Number(event.target.value),
+                    })
+                  }
+                />
+                <em>{scoreScale}</em>
+              </label>
 
-          <label className="slider-control">
-            <span>Score X</span>
-            <input
-              type="range"
-              min="-400"
-              max="400"
-              value={scoreX}
-              onChange={(event) =>
-                updateSettings({
-                  scoreX: Number(event.target.value),
-                })
-              }
-            />
-            <em>{scoreX}</em>
-          </label>
+              <label className="slider-control">
+                <span>Score X</span>
+                <input
+                  type="range"
+                  min="-400"
+                  max="400"
+                  value={scoreX}
+                  onChange={(event) =>
+                    updateSettings({
+                      scoreX: Number(event.target.value),
+                    })
+                  }
+                />
+                <em>{scoreX}</em>
+              </label>
 
-          <label className="slider-control">
-            <span>Score Y</span>
-            <input
-              type="range"
-              min="-300"
-              max="300"
-              value={scoreY}
-              onChange={(event) =>
-                updateSettings({
-                  scoreY: Number(event.target.value),
-                })
-              }
-            />
-            <em>{scoreY}</em>
-          </label>
+              <label className="slider-control">
+                <span>Score Y</span>
+                <input
+                  type="range"
+                  min="-300"
+                  max="300"
+                  value={scoreY}
+                  onChange={(event) =>
+                    updateSettings({
+                      scoreY: Number(event.target.value),
+                    })
+                  }
+                />
+                <em>{scoreY}</em>
+              </label>
 
-          <label className="slider-control">
-            <span>Paper Cut</span>
-            <input
-              type="range"
-              min="50"
-              max="95"
-              value={scoreWhiteCut}
-              onChange={(event) =>
-                updateSettings({
-                  scoreWhiteCut: Number(event.target.value),
-                })
-              }
-            />
-            <em>{scoreWhiteCut}</em>
-          </label>
+              <label className="slider-control">
+                <span>Paper Cut</span>
+                <input
+                  type="range"
+                  min="50"
+                  max="95"
+                  value={scoreWhiteCut}
+                  onChange={(event) =>
+                    updateSettings({
+                      scoreWhiteCut: Number(event.target.value),
+                    })
+                  }
+                />
+                <em>{scoreWhiteCut}</em>
+              </label>
 
-          <label className="slider-control">
-            <span>Ink Lift</span>
-            <input
-              type="range"
-              min="0"
-              max="60"
-              value={scoreInkBoost}
-              onChange={(event) =>
-                updateSettings({
-                  scoreInkBoost: Number(event.target.value),
-                })
-              }
-            />
-            <em>{scoreInkBoost}</em>
-          </label>
-        </div>
+              <label className="slider-control">
+                <span>Ink Lift</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="60"
+                  value={scoreInkBoost}
+                  onChange={(event) =>
+                    updateSettings({
+                      scoreInkBoost: Number(event.target.value),
+                    })
+                  }
+                />
+                <em>{scoreInkBoost}</em>
+              </label>
+            </div>
+          </>
+        )}
       </section>
 
       <div className="status ui-panel">
@@ -1855,7 +1828,7 @@ function App() {
         <span>VOL {volume}</span>
         <span>{backgroundMode}</span>
         <span>{visualEffect}</span>
-        <span>{scoreRenderMode === 'void' ? 'Void Mode' : 'Plain Mode'}</span>
+        <span>{scoreRenderMode === 'void' ? 'Void Mode' : scoreRenderMode === 'tune' ? 'Tune Mode' : 'Plain Mode'}</span>
         <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
         <span>{`Slot ${activePdfSlotIndex + 1}`}</span>
         <span>{scoreImageName}</span>
@@ -1878,6 +1851,12 @@ function App() {
           <span>Actual Sync Mode: Absolute Ref + forceFrame</span>
           <span>Elapsed: {(elapsedTime).toFixed(2)}s</span>
           <span>Beat Count: {debugMetrics.beatCount}</span>
+          {scoreRenderMode === 'tune' && (
+            <>
+              <span>Tune Hz Dist: {tuneData.distance.toFixed(3)}</span>
+              <span>Tune Phase: {tunePhase}</span>
+            </>
+          )}
         </div>
       )}
     </main>
