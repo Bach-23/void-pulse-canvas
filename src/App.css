@@ -587,6 +587,39 @@ h1 {
   justify-content: center;
   align-items: center;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+
+.tune-container.is-visible {
+  opacity: 1;
+}
+
+.tune-container.is-hidden {
+  opacity: 0;
+  transition: opacity 0s; /* Zanshin終了後のスナップバック（ちらつき）を防ぐため一瞬で非表示 */
+}
+
+/* Tune UIと標準UIの共有フェード用クラス */
+.tune-ui-controls,
+.standard-ui-controls {
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  transform: translateZ(0);
+  will-change: opacity;
+  pointer-events: none;
+}
+
+.tune-ui-controls.is-visible,
+.standard-ui-controls.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tune-ui-controls.is-hidden,
+.standard-ui-controls.is-hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* 7% / 93% のガイドライン */

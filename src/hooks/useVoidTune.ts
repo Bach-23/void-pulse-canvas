@@ -1,4 +1,5 @@
-import { useRef, useCallback, useState } from 'react'
+// C:\Users\tasuk\dev\void-pulse-canvas\src\hooks\useVoidTune.ts
+import { useRef, useCallback, useState, useEffect } from 'react'
 
 export type TuneData = {
   distance: number
@@ -6,7 +7,7 @@ export type TuneData = {
   isStable: boolean
 }
 
-export function useVoidTune(): {
+export function useVoidTune(referenceHz: number = 440): {
   startTuner: () => Promise<void>
   stopTuner: () => Promise<void>
   tuneData: TuneData
@@ -22,6 +23,11 @@ export function useVoidTune(): {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const timerRef = useRef<number | null>(null)
   const distanceEmaRef = useRef<number>(0)
+  
+  const referenceHzRef = useRef<number>(referenceHz)
+  useEffect(() => {
+    referenceHzRef.current = referenceHz
+  }, [referenceHz])
 
   // 軽量版Autocorrelation（自己相関）アルゴリズム
   const autoCorrelate = (buf: Float32Array, sampleRate: number): number => {
@@ -55,6 +61,7 @@ export function useVoidTune(): {
 
     let d = 0
     while (c[d] > c[d + 1]) d++
+   
     let maxval = -1, maxpos = -1
     for (let i = d; i < SIZE; i++) {
       if (c[i] > maxval) {
@@ -116,19 +123,21 @@ export function useVoidTune(): {
         analyser.getFloatTimeDomainData(buffer)
         const hz = autoCorrelate(buffer, ctx.sampleRate)
 
-        if (hz !== -1) {
-          const noteNum = 12 * (Math.log(hz / 440) / Math.log(2)) + 69
+        if (hz !== -1 && hz > 0) {
+          const baseRefHz = referenceHzRef.current
+          const noteNum = 12 * (Math.log(hz / baseRefHz) / Math.log(2)) + 69
           const roundedNote = Math.round(noteNum)
-          const targetHz = 440 * Math.pow(2, (roundedNote - 69) / 12)
-          const diff = hz - targetHz
+   
+          const targetHz = baseRefHz * Math.pow(2, (roundedNote - 69) / 12)
+          const cents = 1200 * Math.log2(hz / targetHz)
 
           const octave = Math.floor(roundedNote / 12) - 1
-          const noteName = noteStrings[roundedNote % 12] + octave
+          const noteName = noteStrings[((roundedNote % 12) + 12) % 12] + octave
 
-          // Dead zone の適用
+          // Cents base dead zone: ±50セントをUI距離±1にマッピング
           let targetDistance = 0
-          if (Math.abs(diff) > 0.8) {
-            targetDistance = Math.max(-1, Math.min(1, diff / 20))
+          if (Math.abs(cents) > 2.0) {
+            targetDistance = Math.max(-1, Math.min(1, cents / 50))
           }
 
           // EMA平滑化係数の動的切り替え
@@ -140,11 +149,13 @@ export function useVoidTune(): {
           }
 
           distanceEmaRef.current = distanceEmaRef.current + alpha * (targetDistance - distanceEmaRef.current)
+          
+          const smoothedCents = distanceEmaRef.current * 50
 
           setTuneData({
             distance: distanceEmaRef.current,
             noteName,
-            isStable: Math.abs(distanceEmaRef.current) < 0.05
+            isStable: Math.abs(smoothedCents) < 20
           })
         }
 
