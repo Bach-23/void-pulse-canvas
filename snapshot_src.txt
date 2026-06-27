@@ -1,0 +1,3825 @@
+===== C:\Users\tasuk\dev\void-pulse-canvas\src\App.css =====
+/* ==========================================================================
+   Void Pulse Canvas - Core Architecture Stylesheet (Responsive Perfect Edition)
+   ========================================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100dvh;
+  margin: 0;
+}
+
+body {
+  background: #050608;
+  color: #f5f5f5;
+  font-family: system-ui, "-apple-system", "Segoe UI", sans-serif;
+  overflow-x: hidden;
+}
+
+.app {
+  position: relative;
+  background: #050608;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start; /* 溢れた時は必ず上から自然に流れる構造 */
+  min-height: 100dvh;
+  padding: 0;
+  touch-action: none; /* iPad等のネイティブスクロール・スワイプ横取りを完全封殺 */
+}
+
+.background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(
+      rgba(5, 6, 8, 0.08),
+      rgba(5, 6, 8, 0.42)
+    ),
+    url("/images/void-bg-01.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: saturate(0.96) contrast(1.16) brightness(0.92);
+  transform: scale(1.018);
+  transform-origin: center;
+}
+
+.background.is-running {
+  animation: imageBreathing var(--beat-duration) ease-in-out infinite;
+}
+
+.background.is-paused {
+  animation: none;
+}
+
+/* =========================================
+   Score Overlay & Canvas
+   ========================================= */
+.score-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.score-overlay canvas {
+  transform: translate(var(--score-x, 0px), var(--score-y, 0px)) scale(var(--score-scale, 1));
+  opacity: var(--score-opacity, 1);
+  transform-origin: center;
+  transition: transform 0.1s linear, opacity 0.3s ease;
+  will-change: transform, opacity;
+}
+
+/* =========================================
+   Ripple Animations
+   ========================================= */
+.small-ripple {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 14vmin;
+  height: 14vmin;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 2px solid rgba(
+    220,
+    235,
+    255,
+    calc(0.12 + 0.56 * var(--small-ripple-intensity))
+  );
+  box-shadow:
+    0 0 calc(20px + 42px * var(--small-ripple-intensity))
+      rgba(190, 210, 255, calc(0.08 + 0.34 * var(--small-ripple-intensity))),
+    inset 0 0 calc(14px + 30px * var(--small-ripple-intensity))
+      rgba(220, 235, 255, calc(0.05 + 0.22 * var(--small-ripple-intensity)));
+  mix-blend-mode: screen;
+  transform: translate(-50%, -50%) scale(0.1);
+  animation: smallRipple var(--beat-duration) ease-out forwards;
+}
+
+.large-ripple {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 22vmin;
+  height: 22vmin;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 3px solid rgba(
+    220,
+    235,
+    255,
+    calc(0.18 + 0.48 * var(--large-ripple-intensity))
+  );
+  box-shadow:
+    0 0 calc(36px + 52px * var(--large-ripple-intensity))
+      rgba(190, 210, 255, calc(0.12 + 0.36 * var(--large-ripple-intensity))),
+    inset 0 0 calc(28px + 42px * var(--large-ripple-intensity))
+      rgba(220, 235, 255, calc(0.08 + 0.24 * var(--large-ripple-intensity)));
+  mix-blend-mode: screen;
+  transform: translate(-50%, -50%) scale(0.08);
+  animation: largeRipple var(--large-ripple-duration) ease-out forwards;
+}
+
+/* =========================================
+   Sweep Animations & Ghosts
+   ========================================= */
+.sweep-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+  mix-blend-mode: screen;
+}
+
+.sweep-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(200, 220, 255, 0.25),
+    rgba(200, 220, 255, 0.45),
+    rgba(200, 220, 255, 0.25),
+    transparent
+  );
+  transform: translateX(-50%);
+}
+
+.sweep-line.is-bar-head {
+  animation: sweep-flash 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  z-index: 10;
+}
+
+@keyframes sweep-flash {
+  0% {
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(255, 255, 255, 0.95),
+      rgba(220, 235, 255, 1),
+      rgba(255, 255, 255, 0.95),
+      transparent
+    );
+    opacity: 1;
+    filter: blur(2px);
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.8), 0 0 24px rgba(180, 200, 255, 0.6);
+  }
+  100% {
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(255, 255, 255, 0.95),
+      rgba(220, 235, 255, 1),
+      rgba(255, 255, 255, 0.95),
+      transparent
+    );
+    opacity: 0;
+    filter: blur(0px);
+    box-shadow: none;
+  }
+}
+
+.line-sweep-ghost {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 1);
+  transform-origin: center;
+}
+
+.ghost-sweep-ghost {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(230, 238, 255, 0.85);
+  transform-origin: center;
+}
+
+.score-plain-mode .score-overlay {
+  mix-blend-mode: normal !important;
+}
+
+.score-plain-mode .score-overlay canvas {
+  mix-blend-mode: normal !important;
+  filter: none !important;
+  opacity: 1 !important;
+  background-color: #ffffff;
+}
+
+/* =========================================
+   UI & Controls (Main Panels)
+   ========================================= */
+.hero {
+  position: relative;
+  z-index: 2;
+  width: min(960px, 94vw);
+  text-align: center;
+  padding: 44px;
+  margin: auto 0; /* 安全設計：コンテンツに余裕がある時は上下中央、溢れたら上詰め */
+  backdrop-filter: blur(2px);
+  transition:
+    opacity 500ms ease,
+    transform 500ms ease,
+    filter 500ms ease;
+}
+
+.eyebrow {
+  margin: 0 0 20px;
+  color: rgba(220, 230, 245, 0.72);
+  font-size: clamp(16px, 2.4vw, 28px);
+  letter-spacing: 0.08em;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(52px, 8.4vw, 112px);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.subtitle {
+  margin: 34px 0 0;
+  color: rgba(220, 230, 245, 0.78);
+  font-size: clamp(17px, 3vw, 32px);
+  letter-spacing: 0.05em;
+}
+
+.primary-action-row {
+  margin-top: 44px;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.pulse-button {
+  min-width: 260px;
+  padding: 20px 48px;
+  border: 1px solid rgba(220, 235, 255, 0.44);
+  border-radius: 999px;
+  background:
+    radial-gradient(
+      circle at 50% 20%,
+      rgba(220, 235, 255, 0.22),
+      rgba(5, 6, 8, 0.42)
+    );
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 18px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 0 42px rgba(190, 210, 255, 0.2),
+    inset 0 0 24px rgba(220, 235, 255, 0.08);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.pulse-button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(220, 235, 255, 0.68);
+  box-shadow:
+    0 0 58px rgba(190, 210, 255, 0.28),
+    inset 0 0 28px rgba(220, 235, 255, 0.12);
+}
+
+.pulse-button.is-active {
+  background:
+    radial-gradient(
+      circle at 50% 20%,
+      rgba(220, 235, 255, 0.28),
+      rgba(5, 6, 8, 0.34)
+    );
+}
+
+.secondary-controls {
+  margin-top: 26px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compact-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(220, 230, 245, 0.18);
+  border-radius: 999px;
+  background: rgba(5, 6, 8, 0.28);
+  color: rgba(245, 245, 245, 0.68);
+  backdrop-filter: blur(8px);
+  letter-spacing: 0.1em;
+}
+
+.compact-control span {
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.compact-control input,
+.compact-control select {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+  text-align: center;
+}
+
+.compact-control input {
+  width: 68px;
+}
+
+.compact-control select {
+  width: 74px;
+  cursor: pointer;
+}
+
+.sound-control select {
+  width: 132px;
+}
+
+.compact-control option {
+  background: #050608;
+  color: #f5f5f5;
+}
+
+/* スイッチボタングループ */
+.audio-switch-group,
+.score-switch-group,
+.debug-switch-group {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(220, 230, 245, 0.18);
+  border-radius: 999px;
+  background: rgba(5, 6, 8, 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.audio-switch,
+.score-switch,
+.debug-switch {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(220, 230, 245, 0.46);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.audio-switch:hover,
+.score-switch:hover,
+.debug-switch:hover {
+  color: rgba(245, 245, 245, 0.82);
+}
+
+.audio-switch.is-active,
+.score-switch.is-active,
+.debug-switch.is-active {
+  background: rgba(220, 235, 255, 0.16);
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    inset 0 0 14px rgba(220, 235, 255, 0.07),
+    0 0 16px rgba(190, 210, 255, 0.1);
+}
+
+.score-switch:disabled,
+.debug-switch:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.sliders {
+  margin: 22px auto 0;
+  display: grid;
+  gap: 8px;
+  width: min(480px, 90vw);
+  padding: 14px 16px;
+  border: 1px solid rgba(220, 230, 245, 0.12);
+  border-radius: 18px;
+  background: rgba(5, 6, 8, 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.slider-control {
+  display: grid;
+  grid-template-columns: 64px 1fr 32px;
+  align-items: center;
+  gap: 10px;
+  color: rgba(220, 230, 245, 0.58);
+  font-size: 11px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.slider-control input {
+  width: 100%;
+  accent-color: rgba(220, 235, 255, 0.78);
+}
+
+.slider-control em {
+  font-style: normal;
+  text-align: right;
+  color: rgba(245, 245, 245, 0.66);
+}
+
+.status {
+  position: fixed;
+  left: 32px;
+  bottom: 28px;
+  z-index: 3;
+  display: flex;
+  gap: 18px;
+  color: rgba(220, 230, 245, 0.56);
+  font-size: 12px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  transition:
+    opacity 500ms ease,
+    transform 500ms ease,
+    filter 500ms ease;
+}
+
+.ui-panel {
+  will-change: opacity, transform, filter;
+}
+
+.app.ui-visible .ui-panel {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+  pointer-events: auto;
+  transition-duration: 500ms;
+}
+
+.app.ui-hidden .ui-panel {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(3px);
+  pointer-events: none;
+  transition-duration: 1000ms;
+}
+
+.app.ui-hidden {
+  cursor: none;
+}
+
+.app.ui-visible {
+  cursor: default;
+}
+
+.debug-panel {
+  position: fixed;
+  right: 32px;
+  bottom: 28px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: rgba(255, 100, 100, 0.8);
+  font-size: 10px;
+  font-family: monospace;
+  text-align: right;
+  pointer-events: none;
+}
+
+@keyframes imageBreathing {
+  0% {
+    filter: saturate(0.98) contrast(1.18)
+      brightness(calc(0.88 + 0.18 * var(--breath-intensity)));
+    transform: scale(calc(1.014 + 0.008 * var(--breath-intensity)));
+  }
+  50% {
+    filter: saturate(0.82) contrast(1.08)
+      brightness(calc(0.62 + 0.16 * var(--breath-intensity)));
+    transform: scale(calc(1.026 + 0.038 * var(--breath-intensity)));
+  }
+  100% {
+    filter: saturate(0.98) contrast(1.18)
+      brightness(calc(0.88 + 0.18 * var(--breath-intensity)));
+    transform: scale(calc(1.014 + 0.008 * var(--breath-intensity)));
+  }
+}
+
+@keyframes smallRipple {
+  0% {
+    opacity: calc(0.28 + 0.62 * var(--small-ripple-intensity));
+    transform: translate(-50%, -50%) scale(0.1);
+  }
+  55% {
+    opacity: calc(0.14 + 0.28 * var(--small-ripple-intensity));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      scale(calc(1.8 + 1.5 * var(--small-ripple-intensity)));
+  }
+}
+
+@keyframes largeRipple {
+  0% {
+    opacity: calc(0.38 + 0.52 * var(--large-ripple-intensity));
+    transform: translate(-50%, -50%) scale(0.08);
+  }
+  55% {
+    opacity: calc(0.16 + 0.32 * var(--large-ripple-intensity));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      scale(calc(4.8 + 2.4 * var(--large-ripple-intensity)));
+  }
+}
+
+/* =========================================
+   Void Tune & Zanshin Transition Styles
+   ========================================= */
+.tune-container {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+
+.tune-container.is-visible {
+  opacity: 1;
+}
+
+.tune-container.is-hidden {
+  opacity: 0;
+  transition: opacity 0s; /* 終了時のスナップバック現象（一瞬のチラつき）を完全に防止 */
+}
+
+/* クロスフェード対応コンポーネントラッパー */
+.tune-ui-controls,
+.standard-ui-controls {
+  width: 100%;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  transform: translateZ(0);
+  will-change: opacity;
+  pointer-events: none;
+}
+
+.tune-ui-controls.is-visible,
+.standard-ui-controls.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tune-ui-controls.is-hidden,
+.standard-ui-controls.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tune-side-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(220, 235, 255, calc(0.1 + 0.4 * var(--tune-brightness, 0)));
+  transition: opacity 0.3s ease, background 0.1s linear;
+}
+
+.tune-side-line.left {
+  left: 7%;
+}
+
+.tune-side-line.right {
+  left: 93%;
+}
+
+.tune-center-line {
+  position: absolute;
+  width: 40vw;
+  height: 2px;
+  background: rgba(255, 255, 255, var(--tune-brightness, 1));
+  box-shadow: 0 0 16px rgba(220, 235, 255, calc(0.3 + 0.5 * var(--tune-brightness, 1)));
+  transform: translateY(var(--tune-y, 0px));
+  transition: transform 0.1s linear, opacity 0.3s ease;
+  will-change: transform, opacity;
+}
+
+.tune-note-display {
+  position: absolute;
+  top: calc(50% - 60px);
+  font-size: 32px;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, var(--tune-brightness, 1));
+  opacity: 0.8;
+  transition: opacity 0.3s ease;
+}
+
+.tune-particle-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.tune-particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  filter: blur(2px);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  animation: floatParticle 4s infinite ease-in-out;
+  will-change: transform, opacity;
+}
+
+@keyframes floatParticle {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0;
+  }
+  50% {
+    transform: translate(-50%, calc(-50% - 3px)) scale(1.05);
+    opacity: calc(0.25 * var(--tune-brightness, 1));
+  }
+  100% {
+    transform: translate(-50%, calc(-50% + 3px)) scale(1);
+    opacity: 0;
+  }
+}
+
+/* 残心（Zanshin）トランジションステート */
+.tune-container.absorb .tune-side-line,
+.tune-container.absorb .tune-note-display,
+.tune-container.absorb .tune-particle-layer {
+  opacity: 0;
+}
+
+.tune-container.absorb .tune-center-line {
+  transform: translateY(0);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  background: #ffffff;
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.8);
+}
+
+.tune-container.expand .tune-center-line {
+  transform: translateY(0) rotate(90deg) scaleX(20);
+  opacity: 0;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease-out;
+}
+
+.app.phase-expand .score-overlay,
+.app.phase-expand .background {
+  animation: fadeInCanvas 0.5s ease forwards;
+}
+
+@keyframes fadeInCanvas {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* ==========================================================================
+   Responsive Architecture - Mobile Vertical Breathing Design (iPhone 16 Pro)
+   ========================================================================== */
+@media (max-width: 600px) {
+  html,
+  body,
+  #root,
+  .app {
+    min-height: 100dvh; /* 動的ツールバーに完全追従 */
+  }
+
+  .app {
+    touch-action: pan-y; /* 横スワイプ判定を壊さず、スマホでの自然な縦スクロールを優雅に解放 */
+    padding: 16px 12px;
+  }
+
+  .hero {
+    width: 100%;
+    max-width: 100%;
+    padding: 24px 8px;
+    margin: 0 auto; /* スマホではフローに沿って上部から配置し、余白を贅沢に活用 */
+  }
+
+  .eyebrow {
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-size: clamp(38px, 9vw, 48px); /* 横幅はみ出しを確実に防止するモバイル黄金比 */
+    letter-spacing: -0.04em;
+  }
+
+  .subtitle {
+    font-size: 16px;
+    margin-top: 20px;
+    line-height: 1.4;
+  }
+
+  /* メインアクションボタンの縦積み（垂直方向への呼吸） */
+  .primary-action-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    margin-top: 32px;
+    width: 100%;
+  }
+
+  .pulse-button {
+    width: min(300px, 100%);
+    min-width: 0; /* 固定幅を排し、あらゆるコンパクト画面に適応 */
+    padding: 16px 32px;
+    font-size: 15px;
+    letter-spacing: 0.14em;
+    white-space: nowrap;
+  }
+  
+  .pulse-button + .pulse-button {
+    margin-left: 0 !important; /* インラインスタイルの残留を完全に上書き隠滅 */
+  }
+
+  /* コントロール・スライダーエリアの適正化 */
+  .secondary-controls {
+    gap: 8px;
+    margin-top: 24px;
+    width: 100%;
+  }
+
+  .compact-control {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .compact-control input {
+    width: 54px;
+    font-size: 13px;
+  }
+
+  .compact-control select {
+    width: 64px;
+    font-size: 13px;
+  }
+
+  .sound-control select {
+    width: min(105px, 100%); /* 音色の長い文字列がはみ出さないセーフ幅 */
+  }
+
+  .audio-switch-group,
+  .score-switch-group,
+  .debug-switch-group {
+    padding: 2px;
+  }
+
+  .audio-switch,
+  .score-switch,
+  .debug-switch {
+    padding: 6px 10px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  .sliders {
+    width: 100%;
+    padding: 12px 14px;
+    margin-top: 20px;
+    border-radius: 14px;
+  }
+
+  .slider-control {
+    grid-template-columns: 56px 1fr 28px;
+    gap: 8px;
+    font-size: 10px;
+  }
+
+  /* ステータスパネルのフロー退避構造（B案の完全実装） */
+  .status {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    z-index: 2;
+    margin: 40px auto 0;
+    width: 100%;
+    max-width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    font-size: 10px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom)); /* 下部ブラウザバーやセーフエリアとの衝突を完全防壁 */
+  }
+
+  .debug-panel {
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    font-size: 9px;
+  }
+}
+
+===== C:\Users\tasuk\dev\void-pulse-canvas\src\App.tsx =====
+// App.tsx
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent, CSSProperties } from 'react'
+
+// @ts-ignore
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
+// @ts-ignore
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker?url'
+
+import { useAudioPulse } from './hooks/useAudioPulse'
+import { useVoidTune } from './hooks/useVoidTune'
+import type {
+  TimeSignature,
+  ClickSound,
+  ClickSubdivision,
+  VisualEffect,
+  BackgroundMode,
+  PresetName,
+  PresetValues,
+  SavedSettings,
+  DebugMetrics,
+  PdfSlot,
+} from './types'
+import './App.css'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+
+const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
+const DEFAULT_SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
+const PDF_SLOT_COUNT = 10
+
+const DB_NAME = 'VoidPulseCanvasDB'
+const DB_VERSION = 1
+const STORE_NAME = 'pdfSlots'
+
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'slotIndex' })
+      }
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+const saveSlotToDB = async (
+  slotIndex: number,
+  pdfData: ArrayBuffer,
+  fileName: string,
+  pageNumber: number,
+  pageCount: number
+): Promise<void> => {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    store.put({ slotIndex, pdfData, fileName, pageNumber, pageCount })
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+const loadSlotsFromDB = async (): Promise<any[]> => {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const store = tx.objectStore(STORE_NAME)
+    const request = store.getAll()
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+const updateSlotPageInDB = async (slotIndex: number, pageNumber: number): Promise<void> => {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    const request = store.get(slotIndex)
+    request.onsuccess = () => {
+      const data = request.result
+      if (data) {
+        data.pageNumber = pageNumber
+        store.put(data)
+      }
+    }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+const clearPdfSlotsFromDB = async (): Promise<void> => {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    store.clear()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+const defaultPresetValues: PresetValues = {
+  bpm: 105,
+  timeSignature: '4/4',
+  breathIntensity: 40,
+  smallRippleIntensity: 100,
+  largeRippleIntensity: 40,
+  clickSound: 'Soft Tick',
+  clickSubdivision: 'Quarter',
+  visualEffect: 'Ripple',
+  volume: 70,
+  isScoreVisible: false,
+  scoreOpacity: 70,
+  scoreScale: 72,
+  scoreX: 0,
+  scoreY: 0,
+  scoreWhiteCut: 80,
+  scoreInkBoost: 30,
+  backgroundMode: 'Image',
+}
+
+const defaultSettings: SavedSettings = {
+  ...defaultPresetValues,
+  isDebugEnabled: false,
+  selectedPreset: 'Current',
+  savedPreset: null,
+}
+
+const clickSoundOptions: ClickSound[] = [
+  'Soft Tick',
+  'Wood',
+  'Metal',
+  'Breath',
+  'Muted Key',
+]
+
+const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth']
+const visualEffectOptions: VisualEffect[] = ['Ripple', 'Line Sweep', 'Ghost Sweep', 'None']
+
+const presetOptions: PresetName[] = [
+  'Current',
+  'Void / Score Float',
+  'Void / Practice',
+  'Void / Recording',
+  'Void / Night',
+  'My Saved Preset',
+]
+
+const backgroundModeOptions: BackgroundMode[] = [
+  'Image',
+  'Void Black',
+  'Warm Gray',
+  'Deep Blue',
+  'Paper Dark',
+]
+
+const createEmptyPdfSlot = (): PdfSlot => ({
+  pdf: null,
+  fileName: '',
+  pageNumber: 1,
+  pageCount: 0,
+})
+
+const createInitialPdfSlots = (): PdfSlot[] =>
+  Array.from({ length: PDF_SLOT_COUNT }, () => createEmptyPdfSlot())
+
+const clampNumber = (
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+) => {
+  if (typeof value !== 'number') return fallback
+  if (Number.isNaN(value)) return fallback
+  return Math.min(Math.max(value, min), max)
+}
+
+const isTimeSignature = (value: unknown): value is TimeSignature => {
+  return (
+    value === '2/4' ||
+    value === '3/4' ||
+    value === '4/4' ||
+    value === 'Free'
+  )
+}
+
+const isClickSound = (value: unknown): value is ClickSound => {
+  return (
+    value === 'Soft Tick' ||
+    value === 'Wood' ||
+    value === 'Metal' ||
+    value === 'Breath' ||
+    value === 'Muted Key'
+  )
+}
+
+const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
+  return value === 'Quarter' || value === 'Eighth'
+}
+
+const isVisualEffect = (value: unknown): value is VisualEffect => {
+  return value === 'Ripple' || value === 'Line Sweep' || value === 'Ghost Sweep' || value === 'None'
+}
+
+const isPresetName = (value: unknown): value is PresetName => {
+  return (
+    value === 'Current' ||
+    value === 'Void / Score Float' ||
+    value === 'Void / Practice' ||
+    value === 'Void / Recording' ||
+    value === 'Void / Night' ||
+    value === 'My Saved Preset'
+  )
+}
+
+const isBackgroundMode = (value: unknown): value is BackgroundMode => {
+  return (
+    value === 'Image' ||
+    value === 'Void Black' ||
+    value === 'Warm Gray' ||
+    value === 'Deep Blue' ||
+    value === 'Paper Dark'
+  )
+}
+
+const normalizePresetValues = (
+  value: Partial<PresetValues> | null | undefined,
+  fallback: PresetValues,
+): PresetValues => {
+  return {
+    bpm: clampNumber(value?.bpm, 30, 240, fallback.bpm),
+
+    timeSignature: isTimeSignature(value?.timeSignature)
+      ? value.timeSignature
+      : fallback.timeSignature,
+
+    breathIntensity: clampNumber(
+      value?.breathIntensity,
+      0,
+      100,
+      fallback.breathIntensity,
+    ),
+
+    smallRippleIntensity: clampNumber(
+      value?.smallRippleIntensity,
+      0,
+      100,
+      fallback.smallRippleIntensity,
+    ),
+
+    largeRippleIntensity: clampNumber(
+      value?.largeRippleIntensity,
+      0,
+      100,
+      fallback.largeRippleIntensity,
+    ),
+
+    clickSound: isClickSound(value?.clickSound)
+      ? value.clickSound
+      : fallback.clickSound,
+
+    clickSubdivision: isClickSubdivision(value?.clickSubdivision)
+      ? value.clickSubdivision
+      : fallback.clickSubdivision,
+
+    visualEffect: isVisualEffect(value?.visualEffect)
+      ? value.visualEffect
+      : fallback.visualEffect,
+
+    volume: clampNumber(value?.volume, 0, 100, fallback.volume),
+
+    isScoreVisible:
+      typeof value?.isScoreVisible === 'boolean'
+        ? value.isScoreVisible
+        : fallback.isScoreVisible,
+
+    scoreOpacity: clampNumber(
+      value?.scoreOpacity,
+      0,
+      100,
+      fallback.scoreOpacity,
+    ),
+
+    scoreScale: clampNumber(value?.scoreScale, 20, 160, fallback.scoreScale),
+
+    scoreX: clampNumber(value?.scoreX, -400, 400, fallback.scoreX),
+
+    scoreY: clampNumber(value?.scoreY, -300, 300, fallback.scoreY),
+
+    scoreWhiteCut: clampNumber(
+      value?.scoreWhiteCut,
+      50,
+      95,
+      fallback.scoreWhiteCut,
+    ),
+
+    scoreInkBoost: clampNumber(
+      value?.scoreInkBoost,
+      0,
+      60,
+      fallback.scoreInkBoost,
+    ),
+
+    backgroundMode: isBackgroundMode(value?.backgroundMode)
+      ? value.backgroundMode
+      : fallback.backgroundMode,
+  }
+}
+
+function loadSettings(): SavedSettings {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+
+    if (!raw) {
+      return defaultSettings
+    }
+
+    const parsed = JSON.parse(raw) as Partial<SavedSettings>
+
+    const normalizedPresetValues = normalizePresetValues(
+      parsed,
+      defaultPresetValues,
+    )
+
+    const savedPreset =
+      parsed.savedPreset && typeof parsed.savedPreset === 'object'
+        ? normalizePresetValues(parsed.savedPreset, defaultPresetValues)
+        : null
+
+    return {
+      ...normalizedPresetValues,
+
+      isDebugEnabled:
+        typeof parsed.isDebugEnabled === 'boolean'
+          ? parsed.isDebugEnabled
+          : defaultSettings.isDebugEnabled,
+
+      selectedPreset: isPresetName(parsed.selectedPreset)
+        ? parsed.selectedPreset
+        : defaultSettings.selectedPreset,
+
+      savedPreset,
+    }
+  } catch {
+    return defaultSettings
+  }
+}
+
+function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs: number = 400) {
+  const startPos = useRef<{ x: number; y: number; time: number } | null>(null)
+  const isCooldown = useRef(false)
+
+  const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    if (!event.isPrimary) return
+    const target = event.target as HTMLElement
+    if (target.closest('button, input, select, textarea, .ui-panel, .slider-control, .compact-control')) return
+    startPos.current = { x: event.clientX, y: event.clientY, time: Date.now() }
+  }, [])
+
+  const onPointerUp = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    if (!event.isPrimary || !startPos.current || isCooldown.current) {
+      startPos.current = null
+      return
+    }
+
+    const dx = event.clientX - startPos.current.x
+    const dy = event.clientY - startPos.current.y
+    const dt = Date.now() - startPos.current.time
+
+    startPos.current = null
+
+    if (dt > 1000) return
+
+    const absDx = Math.abs(dx)
+    const absDy = Math.abs(dy)
+
+    if (absDx > 56 && absDx > absDy * 1.4) {
+      isCooldown.current = true
+      if (dx > 0) {
+        onSwipeRight()
+      } else {
+        onSwipeLeft()
+      }
+      setTimeout(() => {
+        isCooldown.current = false
+      }, cooldownMs)
+    }
+  }, [onSwipeLeft, onSwipeRight, cooldownMs])
+
+  return { onPointerDown, onPointerUp }
+}
+
+function App() {
+  const [settings, setSettings] = useState<SavedSettings>(() => loadSettings())
+
+  const [isRunning, setIsRunning] = useState(false)
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isUiVisible, setIsUiVisible] = useState(true)
+
+  const [, forceFrame] = useState(0)
+
+  const [scoreRenderMode, setScoreRenderMode] = useState<'void' | 'plain' | 'tune'>('void')
+  const [tunePhase, setTunePhase] = useState<'idle' | 'absorb' | 'expand'>('idle')
+  const [isTuneUiVisible, setIsTuneUiVisible] = useState(false)
+  
+  const [referenceHz, setReferenceHz] = useState(440)
+  const [selectedNote, setSelectedNote] = useState('A')
+  const [isTonePlaying, setIsTonePlaying] = useState(false)
+
+  const [isScoreImageLoaded, setIsScoreImageLoaded] = useState(false)
+  const [scoreImageSource, setScoreImageSource] = useState(
+    DEFAULT_SCORE_IMAGE_SRC,
+  )
+  const [scoreImageName, setScoreImageName] = useState('Default Score')
+
+  const [pdfSlots, setPdfSlots] = useState<PdfSlot[]>(() =>
+    createInitialPdfSlots(),
+  )
+  const [activePdfSlotIndex, setActivePdfSlotIndex] = useState(0)
+
+  const pdfDataCacheRef = useRef<Map<number, ArrayBuffer>>(new Map())
+
+  const [debugMetrics, setDebugMetrics] = useState<DebugMetrics>({
+    targetMs: 0,
+    actualMs: null,
+    diffMs: null,
+    maxDiffMs: 0,
+    beatCount: 0,
+  })
+
+  const isRenderingPdfRef = useRef(false)
+  const scoreCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const scoreImageRef = useRef<HTMLImageElement | null>(null)
+  const scoreFileInputRef = useRef<HTMLInputElement | null>(null)
+  const scorePdfInputRef = useRef<HTMLInputElement | null>(null)
+
+  const {
+    bpm,
+    timeSignature,
+    breathIntensity,
+    smallRippleIntensity,
+    largeRippleIntensity,
+    clickSound,
+    clickSubdivision,
+    visualEffect,
+    volume,
+    isDebugEnabled,
+    isScoreVisible,
+    scoreOpacity,
+    scoreScale,
+    scoreX,
+    scoreY,
+    scoreWhiteCut,
+    scoreInkBoost,
+    selectedPreset,
+    savedPreset,
+    backgroundMode,
+  } = settings
+
+  const activePdfSlot = pdfSlots[activePdfSlotIndex]
+  const isPdfLoaded = Boolean(activePdfSlot?.pdf)
+  const pdfPageNumber = activePdfSlot?.pageNumber ?? 1
+  const pdfPageCount = activePdfSlot?.pageCount ?? 0
+
+  const updateSettings = (nextSettings: Partial<SavedSettings>) => {
+    setSettings((currentSettings) => ({
+      ...currentSettings,
+      ...nextSettings,
+    }))
+  }
+
+  const updatePdfSlot = (slotIndex: number, nextSlot: Partial<PdfSlot>) => {
+    setPdfSlots((currentSlots) =>
+      currentSlots.map((slot, index) =>
+        index === slotIndex ? { ...slot, ...nextSlot } : slot,
+      ),
+    )
+  }
+
+  const getCurrentPresetValues = (): PresetValues => {
+    return {
+      bpm,
+      timeSignature,
+      breathIntensity,
+      smallRippleIntensity,
+      largeRippleIntensity,
+      clickSound,
+      clickSubdivision,
+      visualEffect,
+      volume,
+      isScoreVisible,
+      scoreOpacity,
+      scoreScale,
+      scoreX,
+      scoreY,
+      scoreWhiteCut,
+      scoreInkBoost,
+      backgroundMode,
+    }
+  }
+
+  const saveCurrentPreset = () => {
+    updateSettings({
+      savedPreset: getCurrentPresetValues(),
+      selectedPreset: 'My Saved Preset',
+    })
+  }
+
+  const applyPreset = () => {
+    if (selectedPreset === 'Current') return
+
+    if (selectedPreset === 'My Saved Preset') {
+      if (!savedPreset) return
+      updateSettings({ ...savedPreset })
+      return
+    }
+
+    if (selectedPreset === 'Void / Score Float') {
+      updateSettings({
+        bpm: 105,
+        timeSignature: '4/4',
+        breathIntensity: 40,
+        smallRippleIntensity: 100,
+        largeRippleIntensity: 40,
+        clickSound: 'Muted Key',
+        clickSubdivision: 'Quarter',
+        visualEffect: 'Ripple',
+        volume: 70,
+        isScoreVisible: true,
+        scoreOpacity: 70,
+        scoreScale: 72,
+        scoreX: 0,
+        scoreY: 0,
+        scoreWhiteCut: 80,
+        scoreInkBoost: 30,
+        backgroundMode: 'Image',
+      })
+      return
+    }
+
+    if (selectedPreset === 'Void / Practice') {
+      updateSettings({
+        bpm: 105,
+        timeSignature: '4/4',
+        breathIntensity: 32,
+        smallRippleIntensity: 100,
+        largeRippleIntensity: 36,
+        clickSound: 'Soft Tick',
+        clickSubdivision: 'Quarter',
+        visualEffect: 'Ripple',
+        volume: 72,
+        isScoreVisible: true,
+        scoreOpacity: 82,
+        scoreScale: 78,
+        scoreX: 0,
+        scoreY: 0,
+        scoreWhiteCut: 78,
+        scoreInkBoost: 24,
+        backgroundMode: 'Warm Gray',
+      })
+      return
+    }
+
+    if (selectedPreset === 'Void / Recording') {
+      updateSettings({
+        bpm: 105,
+        timeSignature: '4/4',
+        breathIntensity: 28,
+        smallRippleIntensity: 72,
+        largeRippleIntensity: 32,
+        clickSound: 'Muted Key',
+        clickSubdivision: 'Quarter',
+        visualEffect: 'Ripple',
+        volume: 48,
+        isScoreVisible: true,
+        scoreOpacity: 58,
+        scoreScale: 70,
+        scoreX: 0,
+        scoreY: 0,
+        scoreWhiteCut: 82,
+        scoreInkBoost: 22,
+        backgroundMode: 'Void Black',
+      })
+      return
+    }
+
+    if (selectedPreset === 'Void / Night') {
+      updateSettings({
+        bpm: 105,
+        timeSignature: 'Free',
+        breathIntensity: 58,
+        smallRippleIntensity: 76,
+        largeRippleIntensity: 30,
+        clickSound: 'Breath',
+        clickSubdivision: 'Quarter',
+        visualEffect: 'Ripple',
+        volume: 54,
+        isScoreVisible: true,
+        scoreOpacity: 46,
+        scoreScale: 68,
+        scoreX: 0,
+        scoreY: 0,
+        scoreWhiteCut: 84,
+        scoreInkBoost: 18,
+        backgroundMode: 'Deep Blue',
+      })
+    }
+  }
+
+  const beatsPerBar = useMemo(() => {
+    if (timeSignature === '2/4') return 2
+    if (timeSignature === '3/4') return 3
+    if (timeSignature === '4/4') return 4
+    return 1
+  }, [timeSignature])
+
+  const safeBpm = useMemo(() => {
+    return Math.min(Math.max(bpm, 30), 240)
+  }, [bpm])
+
+  const beatDuration = useMemo(() => {
+    return 60 / safeBpm
+  }, [safeBpm])
+
+  const largeRippleDuration = useMemo(() => {
+    if (timeSignature === 'Free') return beatDuration
+    return beatDuration * beatsPerBar
+  }, [beatDuration, beatsPerBar, timeSignature])
+
+  const volumeRatio = useMemo(() => {
+    return Math.min(Math.max(volume, 0), 100) / 100
+  }, [volume])
+
+  const scoreOpacityRatio = useMemo(() => {
+    return Math.min(Math.max(scoreOpacity, 0), 100) / 100
+  }, [scoreOpacity])
+
+  const scoreScaleRatio = useMemo(() => {
+    return Math.min(Math.max(scoreScale, 20), 160) / 100
+  }, [scoreScale])
+
+  const backgroundInlineStyle = useMemo<CSSProperties>(() => {
+    if (backgroundMode === 'Image') {
+      return {
+        backgroundImage:
+          'linear-gradient(rgba(5, 6, 8, 0.08), rgba(5, 6, 8, 0.42)), url("/images/void-bg-01.jpg")',
+        backgroundColor: '#050608',
+      }
+    }
+
+    if (backgroundMode === 'Void Black') {
+      return {
+        backgroundImage:
+          'radial-gradient(circle at 50% 45%, rgba(35, 38, 46, 0.46), rgba(5, 6, 8, 1) 62%)',
+        backgroundColor: '#050608',
+      }
+    }
+
+    if (backgroundMode === 'Warm Gray') {
+      return {
+        backgroundImage:
+          'linear-gradient(135deg, rgba(60, 56, 50, 1), rgba(22, 21, 20, 1))',
+        backgroundColor: '#292622',
+      }
+    }
+
+    if (backgroundMode === 'Deep Blue') {
+      return {
+        backgroundImage:
+          'radial-gradient(circle at 50% 40%, rgba(22, 40, 66, 0.95), rgba(4, 8, 16, 1) 68%)',
+        backgroundColor: '#040810',
+      }
+    }
+
+    return {
+      backgroundImage:
+        'linear-gradient(135deg, rgba(31, 32, 32, 1), rgba(11, 12, 12, 1))',
+      backgroundColor: '#151616',
+    }
+  }, [backgroundMode])
+
+  const { ensureAudioContext, getElapsedTime } = useAudioPulse({
+    isRunning,
+    isAudioEnabled,
+    beatDuration,
+    beatsPerBar,
+    timeSignature,
+    clickSound,
+    clickSubdivision,
+    volumeRatio,
+  })
+
+  const { startTuner, stopTuner, tuneData } = useVoidTune(referenceHz)
+
+  useEffect(() => {
+    if (scoreRenderMode === 'tune' && !isTonePlaying) {
+      void startTuner()
+    } else {
+      void stopTuner()
+    }
+  }, [scoreRenderMode, isTonePlaying, startTuner, stopTuner])
+
+  const oscAudioCtxRef = useRef<AudioContext | null>(null)
+  const oscNodeRef = useRef<OscillatorNode | null>(null)
+
+  useEffect(() => {
+    if (isTonePlaying && scoreRenderMode === 'tune') {
+      if (!oscAudioCtxRef.current) {
+        oscAudioCtxRef.current = new window.AudioContext()
+      }
+      
+      const ctx = oscAudioCtxRef.current
+      if (ctx.state === 'suspended') {
+        ctx.resume()
+      }
+
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+
+      const noteOffsets: Record<string, number> = { 'A': 0, 'B♭': 1, 'B': 2, 'C': 3 }
+      const semitones = noteOffsets[selectedNote] || 0
+      const freq = referenceHz * Math.pow(2, semitones / 12)
+
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      
+      gain.gain.setValueAtTime(0, ctx.currentTime)
+      gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.1)
+
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start()
+      oscNodeRef.current = osc
+      
+      return () => {
+        const activeCtx = oscAudioCtxRef.current
+        const currentOsc = oscNodeRef.current
+        
+        if (currentOsc && activeCtx) {
+          try {
+            currentOsc.stop()
+            currentOsc.disconnect()
+          } catch (e) {}
+          oscNodeRef.current = null
+        }
+      }
+    }
+  }, [isTonePlaying, scoreRenderMode, referenceHz, selectedNote])
+
+  useEffect(() => {
+    if (!isRunning && scoreRenderMode !== 'tune') return
+    let frameId: number
+    const loop = () => {
+      forceFrame(n => n + 1)
+      frameId = requestAnimationFrame(loop)
+    }
+    frameId = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(frameId)
+  }, [isRunning, scoreRenderMode])
+
+  const elapsedTime = getElapsedTime()
+
+  const beatIndex = elapsedTime > 0 ? Math.floor(elapsedTime / beatDuration) : 0
+  const currentBeat = beatsPerBar === 1 ? 0 : beatIndex % beatsPerBar
+  const isBarHead = timeSignature !== 'Free' && currentBeat === 0
+
+  const sweepProgress = elapsedTime > 0 ? (elapsedTime % (beatDuration * beatsPerBar)) / (beatDuration * beatsPerBar) : 0
+  const sweepLeft = timeSignature === 'Free' ? 7 : 7 + sweepProgress * 86
+
+  const getGhostLifeTime = (vEffect: VisualEffect, isBar: boolean) => {
+    if (vEffect === 'Ghost Sweep') return isBar ? 7.0 : 4.0;
+    return isBar ? 2.0 : 1.2;
+  }
+
+  const ghosts = useMemo<{
+    id: number
+    left: number
+    isBar: boolean
+    progress: number
+  }[]>(() => {
+    if (!isRunning || elapsedTime === 0 || (visualEffect !== 'Line Sweep' && visualEffect !== 'Ghost Sweep')) return []
+
+    const generated: {
+      id: number
+      left: number
+      isBar: boolean
+      progress: number
+    }[] = []
+ 
+    const exactBeat = elapsedTime / beatDuration
+    let i = beatIndex
+
+    const maxSearchBeats = Math.ceil(7.0 / beatDuration) + 1
+
+    while (i > beatIndex - maxSearchBeats && i >= 0) {
+      const beatInBar = beatsPerBar === 1 ? 0 : i % beatsPerBar
+      const isBar = timeSignature !== 'Free' && beatInBar === 0
+      
+      const ageSeconds = (exactBeat - i) * beatDuration
+      const lifeTime = getGhostLifeTime(visualEffect, isBar)
+      const progress = ageSeconds / lifeTime
+
+      if (progress <= 1) {
+        generated.push({
+          id: i,
+          left: timeSignature === 'Free' ? 7 : 7 + (beatInBar / beatsPerBar) * 86,
+          isBar,
+          progress,
+        })
+    
+        if (isBar) {
+          generated.push({
+            id: i + 1000000,
+            left: 93,
+            isBar,
+            progress,
+          })
+        }
+      }
+      i -= 1
+    }
+    return generated
+  }, [elapsedTime, beatIndex, visualEffect, isRunning, beatsPerBar, timeSignature, beatDuration])
+
+  const turnAudioOn = async () => {
+    await ensureAudioContext()
+    setIsAudioEnabled(true)
+  }
+
+  const turnAudioOff = () => {
+    setIsAudioEnabled(false)
+  }
+
+  const executeZanshinTransition = useCallback(async () => {
+    if (tunePhase !== 'idle') return
+
+    setIsTonePlaying(false)
+    setIsTuneUiVisible(false)
+    
+    await new Promise(requestAnimationFrame)
+    setTunePhase('absorb')
+
+    setTimeout(() => {
+      void stopTuner()
+      setTunePhase('expand')
+    }, 300)
+
+    setTimeout(() => {
+      setScoreRenderMode('void')
+      setTunePhase('idle')
+      setIsRunning(false)
+      turnAudioOff()
+    }, 800)
+  }, [stopTuner, tunePhase])
+
+  const toggleFullscreen = async () => {
+    const docEl = document.documentElement as any
+    const doc = document as any
+
+    const requestFullscreen = docEl.requestFullscreen || docEl.webkitRequestFullscreen
+    const exitFullscreen = doc.exitFullscreen || doc.webkitExitFullscreen
+    const isFull = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement)
+
+    try {
+      if (!isFull) {
+        if (requestFullscreen) await requestFullscreen.call(docEl)
+      } else {
+        if (exitFullscreen) await exitFullscreen.call(doc)
+      }
+    } catch (error) {
+      console.error('Fullscreen API error:', error)
+    }
+  }
+
+  const renderScoreCanvas = () => {
+    const canvas = scoreCanvasRef.current
+    const image = scoreImageRef.current
+
+    if (!canvas || !image) return
+    if (!image.naturalWidth || !image.naturalHeight) return
+
+    const width = image.naturalWidth
+    const height = image.naturalHeight
+    const context = canvas.getContext('2d')
+
+    if (!context) return
+
+    canvas.width = width
+    canvas.height = height
+
+    context.clearRect(0, 0, width, height)
+    context.drawImage(image, 0, 0, width, height)
+
+    if (scoreRenderMode === 'plain') {
+      return
+    }
+
+    const imageData = context.getImageData(0, 0, width, height)
+    const data = imageData.data
+
+    const paperCutRatio = Math.min(Math.max(scoreWhiteCut, 50), 95) / 100
+    const inkLiftRatio = Math.min(Math.max(scoreInkBoost, 0), 60) / 60
+
+    const whiteThreshold = 255 - paperCutRatio * 185
+    const fadeRange = Math.max(1, 255 - whiteThreshold)
+
+    for (let index = 0; index < data.length; index += 4) {
+      const red = data[index]
+      const green = data[index + 1]
+      const blue = data[index + 2]
+      const alpha = data[index + 3]
+
+      const brightness = (red + green + blue) / 3
+
+      if (brightness >= whiteThreshold) {
+        const whiteness = Math.min(1, (brightness - whiteThreshold) / fadeRange)
+        const remainingAlpha = Math.max(0, 1 - whiteness)
+
+        data[index + 3] = alpha * remainingAlpha
+        continue
+      }
+
+      const darkness = 1 - brightness / 255
+      const inkStrength = Math.min(1, darkness * inkLiftRatio * 0.8)
+
+      const targetRed = 226
+      const targetGreen = 235
+      const targetBlue = 248
+
+      data[index] = red * (1 - inkStrength) + targetRed * inkStrength
+      data[index + 1] = green * (1 - inkStrength) + targetGreen * inkStrength
+      data[index + 2] = blue * (1 - inkStrength) + targetBlue * inkStrength
+      data[index + 3] = Math.min(255, alpha * (0.72 + inkStrength * 0.34))
+    }
+
+    context.putImageData(imageData, 0, 0)
+  }
+
+  const loadScoreImageFromDataUrl = (dataUrl: string, fileName: string) => {
+    setScoreImageName(fileName)
+    setIsScoreImageLoaded(false)
+    setScoreImageSource(dataUrl)
+    updateSettings({ isScoreVisible: true })
+  }
+
+  const resetPdfSlots = () => {
+    setPdfSlots(createInitialPdfSlots())
+    setActivePdfSlotIndex(0)
+    pdfDataCacheRef.current.clear()
+    clearPdfSlotsFromDB().catch((err) => {
+      console.error('Failed to clear PDF slots from DB:', err)
+    })
+  }
+
+  const handleScoreFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) return
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return
+
+      resetPdfSlots()
+      loadScoreImageFromDataUrl(reader.result, file.name)
+    }
+
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }
+
+  const renderPdfPage = async (
+    slotIndex: number,
+    pageNumber: number,
+    pdfOverride?: any,
+    fileNameOverride?: string,
+  ) => {
+    if (isRenderingPdfRef.current) return
+    isRenderingPdfRef.current = true
+
+    try {
+      const slot = pdfSlots[slotIndex]
+      const pdf = pdfOverride ?? slot?.pdf
+
+      if (!pdf) return
+
+      const totalPages = pdf.numPages
+      const safePageNumber = Math.min(Math.max(pageNumber, 1), totalPages)
+      const page = await pdf.getPage(safePageNumber)
+      const viewport = page.getViewport({ scale: 2 })
+
+      const temporaryCanvas = document.createElement('canvas')
+      const temporaryContext = temporaryCanvas.getContext('2d')
+
+      if (!temporaryContext) return
+
+      temporaryCanvas.width = Math.floor(viewport.width)
+      temporaryCanvas.height = Math.floor(viewport.height)
+
+      await page.render({
+        canvasContext: temporaryContext,
+        viewport,
+      }).promise
+
+      const dataUrl = temporaryCanvas.toDataURL('image/png')
+      const fileName = fileNameOverride ?? slot?.fileName ?? 'PDF Score'
+
+      updatePdfSlot(slotIndex, {
+        pdf,
+        fileName,
+        pageNumber: safePageNumber,
+        pageCount: totalPages,
+      })
+
+      updateSlotPageInDB(slotIndex, safePageNumber).catch((err) => {
+        console.error('Failed to update PDF page in DB:', err)
+      })
+
+      loadScoreImageFromDataUrl(
+        dataUrl,
+        `Slot ${slotIndex + 1}: ${fileName} / page ${safePageNumber}`,
+      )
+    } finally {
+      isRenderingPdfRef.current = false
+    }
+  }
+
+  const handleScorePdfChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (file.type !== 'application/pdf') return
+
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const bufferForDb = arrayBuffer.slice(0)
+
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+
+      updatePdfSlot(activePdfSlotIndex, {
+        pdf,
+        fileName: file.name,
+        pageNumber: 1,
+        pageCount: pdf.numPages,
+      })
+
+      pdfDataCacheRef.current.set(activePdfSlotIndex, bufferForDb.slice(0))
+
+      await renderPdfPage(activePdfSlotIndex, 1, pdf, file.name)
+
+      saveSlotToDB(activePdfSlotIndex, bufferForDb, file.name, 1, pdf.numPages).catch((err) => {
+        console.error('Failed to save PDF to DB:', err)
+      })
+    } catch (error) {
+      console.error('Failed to load PDF score:', error)
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const showPreviousPdfPage = () => {
+    if (!isPdfLoaded) return
+    void renderPdfPage(activePdfSlotIndex, pdfPageNumber - 1)
+  }
+
+  const showNextPdfPage = () => {
+    if (!isPdfLoaded) return
+    void renderPdfPage(activePdfSlotIndex, pdfPageNumber + 1)
+  }
+
+  const activatePdfSlot = async (slotIndex: number) => {
+    setActivePdfSlotIndex(slotIndex)
+
+    const slot = pdfSlots[slotIndex]
+
+    if (slot?.pdf) {
+      void renderPdfPage(slotIndex, slot.pageNumber)
+      return
+    }
+
+    if (pdfDataCacheRef.current.has(slotIndex)) {
+      try {
+        const buffer = pdfDataCacheRef.current.get(slotIndex)!
+        const pdf = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise
+        updatePdfSlot(slotIndex, { pdf })
+        void renderPdfPage(slotIndex, slot.pageNumber, pdf, slot.fileName)
+      } catch (error) {
+        console.error(`Failed to parse cached PDF for slot ${slotIndex}`, error)
+      }
+    }
+  }
+
+  const swipeHandlers = useSwipe(
+    () => {
+      if (isPdfLoaded && pdfPageNumber < pdfPageCount && !isRenderingPdfRef.current) {
+        showNextPdfPage()
+      }
+    },
+    () => {
+      if (isPdfLoaded && pdfPageNumber > 1 && !isRenderingPdfRef.current) {
+        showPreviousPdfPage()
+      }
+    },
+    400
+  )
+
+  useEffect(() => {
+    let isMounted = true
+
+    const restorePdfsFromDB = async () => {
+      try {
+        const savedSlots = await loadSlotsFromDB()
+      
+        if (!isMounted || savedSlots.length === 0) return
+
+        const newSlots = createInitialPdfSlots()
+        let activePdfToRender: any = null
+        let activePageToRender = 1
+        let activeFileName = ''
+
+        for (const saved of savedSlots) {
+          pdfDataCacheRef.current.set(saved.slotIndex, saved.pdfData)
+
+          if (saved.slotIndex === 0) {
+            try {
+              const pdf = await pdfjsLib.getDocument({ data: saved.pdfData.slice(0) }).promise
+              newSlots[saved.slotIndex] = {
+                pdf,
+                fileName: saved.fileName,
+                pageNumber: saved.pageNumber,
+                pageCount: saved.pageCount,
+              }
+              activePdfToRender = pdf
+              activePageToRender = saved.pageNumber
+              activeFileName = saved.fileName
+            } catch (err) {
+              console.error(`Failed to parse PDF for slot 0`, err)
+              newSlots[saved.slotIndex] = {
+                pdf: null,
+                fileName: saved.fileName,
+                pageNumber: saved.pageNumber,
+                pageCount: saved.pageCount,
+              }
+            }
+          } else {
+            newSlots[saved.slotIndex] = {
+              pdf: null,
+              fileName: saved.fileName,
+              pageNumber: saved.pageNumber,
+              pageCount: saved.pageCount,
+            }
+          }
+        }
+
+        if (!isMounted) return
+
+        setPdfSlots(newSlots)
+
+        if (activePdfToRender) {
+          void renderPdfPage(
+            0,
+            activePageToRender,
+            activePdfToRender,
+            activeFileName
+          )
+        }
+      } catch (err) {
+        console.error('Failed to restore PDFs from IndexedDB', err)
+      }
+    }
+
+    restorePdfsFromDB()
+
+    return () => {
+      isMounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+  }, [settings])
+
+  useEffect(() => {
+    const image = new Image()
+
+    image.onload = () => {
+      scoreImageRef.current = image
+      setIsScoreImageLoaded(true)
+    }
+
+    image.onerror = () => {
+      scoreImageRef.current = null
+      setIsScoreImageLoaded(false)
+    }
+
+    image.src = scoreImageSource
+  }, [scoreImageSource])
+
+  useEffect(() => {
+    if (!isScoreImageLoaded) return
+
+    const firstFrameId = window.requestAnimationFrame(() => {
+      renderScoreCanvas()
+
+      window.requestAnimationFrame(() => {
+        renderScoreCanvas()
+      })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(firstFrameId)
+    }
+  }, [
+    isScoreVisible,
+    isScoreImageLoaded,
+    scoreWhiteCut,
+    scoreInkBoost,
+    scoreImageSource,
+    scoreRenderMode,
+  ])
+
+  useEffect(() => {
+    let hideTimerId: number | undefined
+
+    const showUi = () => {
+      setIsUiVisible(true)
+
+      if (hideTimerId) {
+        window.clearTimeout(hideTimerId)
+      }
+
+      if (scoreRenderMode === 'tune' && isTonePlaying) {
+        return
+      }
+
+      const timeoutMs = scoreRenderMode === 'tune' ? 2000 : 3000
+
+      hideTimerId = window.setTimeout(() => {
+        setIsUiVisible(false)
+      }, timeoutMs)
+    }
+
+    window.addEventListener('mousemove', showUi)
+    window.addEventListener('keydown', showUi)
+    window.addEventListener('pointerdown', showUi)
+
+    showUi()
+
+    return () => {
+      window.removeEventListener('mousemove', showUi)
+      window.removeEventListener('keydown', showUi)
+      window.removeEventListener('pointerdown', showUi)
+
+      if (hideTimerId) {
+        window.clearTimeout(hideTimerId)
+      }
+    }
+  }, [scoreRenderMode, isTonePlaying])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const doc = document as any
+      const isFull = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement)
+      setIsFullscreen(isFull)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isRunning && beatIndex > 0) {
+      setDebugMetrics((prev) => ({
+        ...prev,
+        beatCount: beatIndex,
+      }))
+    }
+  }, [beatIndex, isRunning])
+
+  const tuneCanvasBrightness = Math.max(0.1, 1 - Math.abs(tuneData.distance))
+  const tuneY = tuneData.distance * 150
+  const tuneTime = performance.now() / 1000
+  const centerWobble = tuneData.isStable ? (Math.sin(tuneTime * 0.35) * 3 + Math.sin(tuneTime * 0.5) * 0.15) : 0
+  const finalTuneY = tuneY + centerWobble
+
+  return (
+    <main
+      className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'} score-${scoreRenderMode}-mode phase-${tunePhase}`}
+      {...swipeHandlers}
+      style={
+        {
+          '--beat-duration': `${beatDuration}s`,
+          '--large-ripple-duration': `${largeRippleDuration}s`,
+          '--breath-intensity': breathIntensity / 100,
+          '--small-ripple-intensity': smallRippleIntensity / 100,
+          '--large-ripple-intensity': largeRippleIntensity / 100,
+          '--score-opacity': scoreOpacityRatio,
+          '--score-scale': scoreScaleRatio,
+          '--score-x': `${scoreX}px`,
+          '--score-y': `${scoreY}px`,
+          '--tune-y': `${finalTuneY}px`,
+          '--tune-brightness': tuneCanvasBrightness
+        } as CSSProperties
+      }
+    >
+      <input
+        ref={scoreFileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        style={{ display: 'none' }}
+        onChange={handleScoreFileChange}
+      />
+
+      <input
+        ref={scorePdfInputRef}
+        type="file"
+        accept="application/pdf"
+        style={{ display: 'none' }}
+        onChange={handleScorePdfChange}
+      />
+
+      <div
+        className={`background ${isRunning ? 'is-running' : 'is-paused'}`}
+        style={backgroundInlineStyle}
+      />
+
+      <div 
+        className={`tune-container ${tunePhase} ${scoreRenderMode === 'tune' ? 'is-visible' : 'is-hidden'}`}
+      >
+        <div className="tune-side-line left" />
+        <div className="tune-side-line right" />
+        <div className="tune-center-line" />
+        
+        <div className="tune-note-display">
+           {tuneData.noteName !== '--' && <span>{tuneData.noteName}</span>}
+        </div>
+
+        <div className="tune-particle-layer">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={`p-${i}`} className="tune-particle" style={{ animationDelay: `${i * 0.4}s` }} />
+          ))}
+        </div>
+      </div>
+
+      <div
+        className="score-overlay"
+        style={{
+          opacity: isScoreVisible && scoreRenderMode !== 'tune' ? (scoreRenderMode === 'plain' ? 1 : undefined) : 0,
+        }}
+      >
+        <canvas ref={scoreCanvasRef} />
+      </div>
+
+      {isRunning && visualEffect === 'Ripple' && (
+        <>
+          <div key={`small-${beatIndex}`} className="small-ripple" />
+          {isBarHead && (
+            <div key={`large-${beatIndex}`} className="large-ripple" />
+          )}
+        </>
+      )}
+
+      {isRunning && (visualEffect === 'Line Sweep' || visualEffect === 'Ghost Sweep') && (
+        <div className="sweep-container">
+          {isBarHead && (
+            <>
+              <div
+                key={`flash-left-${beatIndex}`}
+                className="sweep-line is-bar-head"
+                style={{ left: '7%' }}
+              />
+              <div
+                key={`flash-right-${beatIndex}`}
+                className="sweep-line is-bar-head"
+                style={{ left: '93%' }}
+              />
+            </>
+          )}
+
+          <div
+            key="sweep-line-main"
+            className="sweep-line"
+            style={{
+              left: `${sweepLeft}%`,
+              animation: 'none'
+            }}
+          />
+
+          {ghosts.map((g) => {
+            const baseOpacity = g.isBar ? 1 : (visualEffect === 'Ghost Sweep' ? 0.4 : 0.25);
+            const fadeCurve = g.isBar ? Math.pow(1 - g.progress, 1.2) : Math.pow(1 - g.progress, 2.5);
+
+            return (
+              <div
+                key={g.id}
+                className={visualEffect === 'Ghost Sweep' ? "ghost-sweep-ghost" : "line-sweep-ghost"}
+                style={{
+                  left: `${g.left}%`,
+                  opacity: Math.max(0, baseOpacity * fadeCurve),
+                  transform: `translateX(-50%) scaleX(${1 + g.progress * (g.isBar ? 2.5 : 1.0)})`,
+                  filter: `blur(${g.progress * (g.isBar ? 6 : 3)}px)`,
+                  animation: 'none'
+                }}
+              />
+            )
+          })}
+        </div>
+      )}
+
+      <section className="hero ui-panel">
+        <p className="eyebrow">Project2026 / Void</p>
+
+        <h1>Void Pulse Canvas</h1>
+
+        <p className="subtitle">
+           Tune the space before the sound.
+        </p>
+
+        <div className={`standard-ui-controls ${scoreRenderMode !== 'tune' ? 'is-visible' : 'is-hidden'}`}>
+          <div className="primary-action-row">
+            <button
+              className={`pulse-button ${isRunning ? 'is-active' : ''}`}
+              onClick={() => setIsRunning(!isRunning)}
+            >
+              {isRunning ? 'Pulse Stop' : 'Pulse Start'}
+            </button>
+
+            {!isRunning && (
+              <button
+                className="pulse-button"
+                style={{ marginLeft: '16px' }}
+                onClick={() => {
+                  setScoreRenderMode('tune')
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      setIsTuneUiVisible(true)
+                    })
+                  })
+                }}
+              >
+                Void Tune
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div 
+          className={`tune-ui-controls ${scoreRenderMode === 'tune' && isTuneUiVisible ? 'is-visible' : 'is-hidden'}`}
+        >
+          <div className="secondary-controls">
+            <label className="compact-control">
+              <span>Hz</span>
+              <input
+                type="number"
+                min="430"
+                max="450"
+                value={referenceHz}
+                onChange={(e) => setReferenceHz(Number(e.target.value))}
+              />
+            </label>
+
+            <label className="compact-control sound-control">
+              <span>Note</span>
+              <select
+                value={selectedNote}
+                onChange={(e) => setSelectedNote(e.target.value)}
+              >
+                <option value="A">A</option>
+                <option value="B♭">B♭</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+              </select>
+            </label>
+
+            <div className="audio-switch-group">
+              <button
+                className={`audio-switch ${isTonePlaying ? 'is-active' : ''}`}
+                onClick={() => setIsTonePlaying(true)}
+              >
+                Sound ON
+              </button>
+              
+              <button
+                className={`audio-switch ${!isTonePlaying ? 'is-active' : ''}`}
+                onClick={() => setIsTonePlaying(false)}
+              >
+                Sound OFF
+              </button>
+            </div>
+          </div>
+
+          <div className="primary-action-row" style={{ marginTop: '24px' }}>
+            <button
+              className={`pulse-button is-active`}
+              onClick={executeZanshinTransition}
+            >
+              {tuneData.isStable ? 'Enter Void' : 'Force Enter Void'}
+            </button>
+          </div>
+        </div>
+
+        <div className={`standard-ui-controls ${scoreRenderMode !== 'tune' ? 'is-visible' : 'is-hidden'}`}>
+          <div className="secondary-controls">
+            <label className="compact-control">
+              <span>BPM</span>
+              <input
+                type="number"
+                min="30"
+                max="240"
+                value={bpm}
+                onChange={(event) =>
+                  updateSettings({ bpm: Number(event.target.value) })
+                }
+              />
+            </label>
+
+            <label className="compact-control">
+              <span>Meter</span>
+              <select
+                value={timeSignature}
+                onChange={(event) =>
+                  updateSettings({
+                    timeSignature: event.target.value as TimeSignature,
+                  })
+                }
+              >
+                <option value="2/4">2/4</option>
+                <option value="3/4">3/4</option>
+                <option value="4/4">4/4</option>
+                <option value="Free">Free</option>
+              </select>
+            </label>
+
+            <label className="compact-control sound-control">
+              <span>Sound</span>
+              <select
+                value={clickSound}
+                onChange={(event) =>
+                  updateSettings({
+                    clickSound: event.target.value as ClickSound,
+                  })
+                }
+              >
+                {clickSoundOptions.map((sound) => (
+                  <option key={sound} value={sound}>
+                    {sound}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="compact-control sound-control">
+              <span>Click</span>
+              <select
+                value={clickSubdivision}
+                onChange={(event) =>
+                  updateSettings({
+                    clickSubdivision: event.target.value as ClickSubdivision,
+                  })
+                }
+              >
+                {clickSubdivisionOptions.map((subdivision) => (
+                  <option key={subdivision} value={subdivision}>
+                    {subdivision}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="compact-control sound-control">
+              <span>Preset</span>
+              <select
+                value={selectedPreset}
+                onChange={(event) =>
+                  updateSettings({
+                    selectedPreset: event.target.value as PresetName,
+                  })
+                }
+              >
+                {presetOptions.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {preset}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="compact-control sound-control">
+              <span>Background</span>
+              <select
+                value={backgroundMode}
+                onChange={(event) =>
+                  updateSettings({
+                    backgroundMode: event.target.value as BackgroundMode,
+                  })
+                }
+              >
+                {backgroundModeOptions.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="compact-control sound-control">
+              <span>Effect</span>
+              <select
+                value={visualEffect}
+                onChange={(event) =>
+                  updateSettings({
+                    visualEffect: event.target.value as VisualEffect,
+                  })
+                }
+              >
+                {visualEffectOptions.map((effect) => (
+                  <option key={effect} value={effect}>
+                    {effect}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="compact-control sound-control">
+              <span>Score Mode</span>
+              <select
+                value={scoreRenderMode}
+                onChange={(event) =>
+                  setScoreRenderMode(event.target.value as 'void' | 'plain' | 'tune')
+                }
+              >
+                <option value="void">Void</option>
+                <option value="plain">Plain</option>
+              </select>
+            </label>
+
+            <label className="compact-control sound-control">
+              <span>PDF Slot</span>
+              <select
+                value={activePdfSlotIndex}
+                onChange={(event) => void activatePdfSlot(Number(event.target.value))}
+              >
+                {pdfSlots.map((slot, index) => (
+                  <option key={index} value={index}>
+                    {`Slot ${index + 1}${slot.fileName ? ` / ${slot.fileName}` : ''}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="score-switch-group">
+              <button className="score-switch" onClick={applyPreset}>
+                Apply
+              </button>
+
+              <button className="score-switch" onClick={saveCurrentPreset}>
+                Save Current
+              </button>
+            </div>
+
+            <div className="score-switch-group">
+              <button
+                className={`score-switch ${isFullscreen ? 'is-active' : ''}`}
+                onClick={toggleFullscreen}
+              >
+                {isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              </button>
+            </div>
+
+            <div className="audio-switch-group">
+              <button
+                className={`audio-switch ${isAudioEnabled ? 'is-active' : ''}`}
+                onClick={turnAudioOn}
+              >
+                Audio ON
+              </button>
+
+              <button
+                className={`audio-switch ${!isAudioEnabled ? 'is-active' : ''}`}
+                onClick={turnAudioOff}
+              >
+                Audio OFF
+              </button>
+            </div>
+
+            <div className="debug-switch-group">
+              <button
+                className={`debug-switch ${isDebugEnabled ? 'is-active' : ''}`}
+                onClick={() => updateSettings({ isDebugEnabled: true })}
+              >
+                Debug ON
+              </button>
+
+              <button
+                className={`debug-switch ${!isDebugEnabled ? 'is-active' : ''}`}
+                onClick={() => updateSettings({ isDebugEnabled: false })}
+              >
+                Debug OFF
+              </button>
+            </div>
+
+            <div className="score-switch-group">
+              <button
+                className={`score-switch ${isScoreVisible ? 'is-active' : ''}`}
+                onClick={() => updateSettings({ isScoreVisible: true })}
+              >
+                Score ON
+              </button>
+
+              <button
+                className={`score-switch ${!isScoreVisible ? 'is-active' : ''}`}
+                onClick={() => updateSettings({ isScoreVisible: false })}
+              >
+                Score OFF
+              </button>
+
+              <button
+                className="score-switch"
+                onClick={() => scoreFileInputRef.current?.click()}
+              >
+                Load PNG
+              </button>
+
+              <button
+                className="score-switch"
+                onClick={() => scorePdfInputRef.current?.click()}
+              >
+                Load PDF
+              </button>
+
+              <button
+                className="score-switch"
+                disabled={!isPdfLoaded || pdfPageNumber <= 1}
+                onClick={showPreviousPdfPage}
+              >
+                PDF Prev
+              </button>
+
+              <button
+                className="score-switch"
+                disabled={!isPdfLoaded || pdfPageNumber >= pdfPageCount}
+                onClick={showNextPdfPage}
+              >
+                PDF Next
+              </button>
+            </div>
+          </div>
+
+          <div className="sliders">
+            <label className="slider-control">
+              <span>Volume</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={volume}
+                onChange={(event) =>
+                  updateSettings({
+                    volume: Number(event.target.value),
+                  })
+                }
+              />
+              <em>{volume}</em>
+            </label>
+
+            <label className="slider-control">
+              <span>Breath</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={breathIntensity}
+                onChange={(event) =>
+                  updateSettings({
+                    breathIntensity: Number(event.target.value),
+                  })
+                }
+              />
+              <em>{breathIntensity}</em>
+            </label>
+
+            <label className="slider-control">
+              <span>Small</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={smallRippleIntensity}
+                onChange={(event) =>
+                  updateSettings({
+                    smallRippleIntensity: Number(event.target.value),
+                  })
+                }
+              />
+              <em>{smallRippleIntensity}</em>
+            </label>
+
+            <label className="slider-control">
+              <span>Large</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={largeRippleIntensity}
+                onChange={(event) =>
+                  updateSettings({
+                    largeRippleIntensity: Number(event.target.value),
+                  })
+                }
+              />
+              <em>{largeRippleIntensity}</em>
+            </label>
+
+            <label className="slider-control">
+              <span>Score Visibility</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={scoreOpacity}
+                onChange={(event) =>
+                  updateSettings({
+                    scoreOpacity: Number(event.target.value),
+                  })
+                }
+              />
+              <em>{scoreOpacity}</em>
+            </label>
+
+            <label className="slider-control">
+              <span>Score Size</span>
+              <input
+                type="range"
+                min="20"
+                max="160"
+                value={scoreScale}
+                onChange={(event) =>
+                  updateSettings({
+                    scoreScale: Number(event.target.value),
+                  })
+                }
+              />
+              <em>{scoreScale}</em>
+            </label>
+
+            <label className="slider-control">
+              <span>Score X</span>
+              <input
+                type="range"
+                min="-400"
+                max="400"
+                value={scoreX}
+                onChange={(event) =>
+                  updateSettings({
+                    scoreX: Number(event.target.value),
+                  })
+                }
+              />
+              <em>{scoreX}</em>
+            </label>
+
+            <label className="slider-control">
+              <span>Score Y</span>
+              <input
+                type="range"
+                min="-300"
+                max="300"
+                value={scoreY}
+                onChange={(event) =>
+                  updateSettings({
+                    scoreY: Number(event.target.value),
+                  })
+                }
+              />
+              <em>{scoreY}</em>
+            </label>
+
+            <label className="slider-control">
+              <span>Paper Cut</span>
+              <input
+                type="range"
+                min="50"
+                max="95"
+                value={scoreWhiteCut}
+                onChange={(event) =>
+                  updateSettings({
+                    scoreWhiteCut: Number(event.target.value),
+                  })
+                }
+              />
+              <em>{scoreWhiteCut}</em>
+            </label>
+
+            <label className="slider-control">
+              <span>Ink Lift</span>
+              <input
+                type="range"
+                min="0"
+                max="60"
+                value={scoreInkBoost}
+                onChange={(event) =>
+                  updateSettings({
+                    scoreInkBoost: Number(event.target.value),
+                  })
+                }
+              />
+              <em>{scoreInkBoost}</em>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <div className="status ui-panel">
+        <span>{safeBpm} BPM</span>
+        <span>{timeSignature}</span>
+        <span>{clickSound}</span>
+        <span>{clickSubdivision}</span>
+        <span>VOL {volume}</span>
+        <span>{backgroundMode}</span>
+        <span>{visualEffect}</span>
+        <span>{scoreRenderMode === 'void' ? 'Void Mode' : scoreRenderMode === 'tune' ? 'Tune Mode' : 'Plain Mode'}</span>
+        <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
+        <span>{`Slot ${activePdfSlotIndex + 1}`}</span>
+        <span>{scoreImageName}</span>
+        <span>
+          {isPdfLoaded ? `PDF ${pdfPageNumber}/${pdfPageCount}` : 'PDF --'}
+        </span>
+        <span>{selectedPreset}</span>
+        <span>
+          {timeSignature === 'Free'
+            ? 'No Meter'
+            : `Beat ${currentBeat + 1}`}
+        </span>
+        <span>{isRunning ? 'Pulse ON' : 'Pulse OFF'}</span>
+        <span>{isAudioEnabled ? 'Audio ON' : 'Audio OFF'}</span>
+      </div>
+
+      {isDebugEnabled && (
+        <div className="debug-panel ui-panel">
+          <span>Debug</span>
+          <span>Actual Sync Mode: Absolute Ref + forceFrame</span>
+          <span>Elapsed: {(elapsedTime).toFixed(2)}s</span>
+          <span>Beat Count: {debugMetrics.beatCount}</span>
+          <div className={`tune-ui-controls ${scoreRenderMode === 'tune' && isTuneUiVisible ? 'is-visible' : 'is-hidden'}`}>
+            <span>Tune Hz Dist: {tuneData.distance.toFixed(3)}</span>
+            <span>Tune Phase: {tunePhase}</span>
+          </div>
+        </div>
+      )}
+    </main>
+  )
+}
+
+export default App
+
+===== C:\Users\tasuk\dev\void-pulse-canvas\src\hooks\useAudioPulse.ts =====
+import { useEffect, useRef, useCallback } from 'react'
+import type { BeatIntensity, ClickSound, ClickSubdivision, TimeSignature } from '../types'
+
+type UseAudioPulseProps = {
+  isRunning: boolean
+  isAudioEnabled: boolean
+  beatDuration: number
+  beatsPerBar: number
+  timeSignature: TimeSignature
+  clickSound: ClickSound
+  clickSubdivision: ClickSubdivision
+  volumeRatio: number
+}
+
+export function useAudioPulse({
+  isRunning,
+  isAudioEnabled,
+  beatDuration,
+  beatsPerBar,
+  timeSignature,
+  clickSound,
+  clickSubdivision,
+  volumeRatio,
+}: UseAudioPulseProps) {
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const startTimeRef = useRef<number | null>(null)
+  
+  // Stateを完全に排除し、純粋な参照型（Ref）として時間を保持
+  const elapsedTimeRef = useRef<number>(0)
+
+  const ensureAudioContext = useCallback(async () => {
+    let needsWarmup = false
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext()
+      needsWarmup = true
+    }
+
+    if (audioContextRef.current.state === 'suspended') {
+      await audioContextRef.current.resume()
+      needsWarmup = true
+    }
+
+    if (needsWarmup) {
+      const ctx = audioContextRef.current
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      gain.gain.setValueAtTime(0.00001, ctx.currentTime)
+      osc.start(ctx.currentTime)
+      osc.stop(ctx.currentTime + 0.05)
+    }
+
+    return audioContextRef.current
+  }, [])
+
+  const createNoiseBuffer = useCallback((audioContext: AudioContext, duration: number) => {
+    const sampleRate = audioContext.sampleRate
+    const frameCount = Math.floor(sampleRate * duration)
+    const buffer = audioContext.createBuffer(1, frameCount, sampleRate)
+    const channelData = buffer.getChannelData(0)
+
+    for (let index = 0; index < frameCount; index += 1) {
+      const whiteNoise = (Math.random() * 2 - 1) * 0.4
+      channelData[index] = whiteNoise
+    }
+
+    return buffer
+  }, [])
+
+  const playOscillatorClick = useCallback((
+    audioContext: AudioContext,
+    now: number,
+    intensity: BeatIntensity,
+    sound: ClickSound,
+  ) => {
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+    const filterNode = audioContext.createBiquadFilter()
+
+    let type: OscillatorType = 'sine'
+    let freq = 880
+    let peakGain = 0.5
+    let attack = 0.002
+    let decay = 0.05
+    let isExpAttack = false
+    let filterType: BiquadFilterType = 'lowpass'
+    let filterFreq = 6000
+    let filterQ = 0
+    let pitchDrop = false
+
+    if (sound === 'Soft Tick') {
+      type = 'sine'
+      freq = intensity === 'High' ? 1480 : intensity === 'Mid' ? 980 : 740
+      peakGain = intensity === 'High' ? 0.6 : intensity === 'Mid' ? 0.4 : 0.25
+      attack = 0.0015
+      decay = 0.025
+      isExpAttack = true
+      filterType = 'lowpass'
+      filterFreq = 8000
+      pitchDrop = false
+    } else if (sound === 'Wood') {
+      type = 'triangle'
+      freq = intensity === 'High' ? 700 : intensity === 'Mid' ? 460 : 320
+      peakGain = intensity === 'High' ? 0.5 : intensity === 'Mid' ? 0.34 : 0.22
+      attack = 0.0028
+      decay = 0.034
+      filterType = 'lowpass'
+      filterFreq = 1400
+      filterQ = 0.2
+      pitchDrop = false
+    } else if (sound === 'Metal') {
+      type = 'triangle'
+      freq = intensity === 'High' ? 2000 : intensity === 'Mid' ? 1400 : 1000
+      peakGain = intensity === 'High' ? 0.2 : intensity === 'Mid' ? 0.13 : 0.08
+      attack = 0.002
+      decay = 0.02
+      filterType = 'lowpass'
+      filterFreq = 3200
+      filterQ = 0.3
+      pitchDrop = false
+    } else if (sound === 'Muted Key') {
+      type = 'sine'
+      freq = intensity === 'High' ? 400 : intensity === 'Mid' ? 300 : 200
+      peakGain = intensity === 'High' ? 0.3 : intensity === 'Mid' ? 0.2 : 0.12
+      attack = 0.003
+      decay = 0.035
+      isExpAttack = false
+      filterType = 'lowpass'
+      filterFreq = 500
+      filterQ = 0.2
+      pitchDrop = false
+    }
+
+    oscillator.type = type
+    filterNode.type = filterType
+    filterNode.frequency.setValueAtTime(filterFreq, now)
+    filterNode.Q.setValueAtTime(filterQ, now)
+
+    oscillator.frequency.setValueAtTime(freq, now)
+    if (pitchDrop) {
+      oscillator.frequency.exponentialRampToValueAtTime(freq * 0.5, now + decay)
+    }
+
+    const adjustedPeak = Math.max(0.0001, peakGain * volumeRatio)
+
+    if (isExpAttack) {
+      gainNode.gain.setValueAtTime(0.0001, now)
+      gainNode.gain.exponentialRampToValueAtTime(adjustedPeak, now + attack)
+    } else {
+      gainNode.gain.setValueAtTime(0, now)
+      gainNode.gain.linearRampToValueAtTime(adjustedPeak, now + attack)
+    }
+
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + attack + decay)
+
+    oscillator.connect(filterNode)
+    filterNode.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+
+    oscillator.start(now)
+    oscillator.stop(now + attack + decay + 0.01)
+  }, [volumeRatio])
+
+  const playBreathClick = useCallback((
+    audioContext: AudioContext,
+    now: number,
+    intensity: BeatIntensity,
+  ) => {
+    const source = audioContext.createBufferSource()
+    const highPassNode = audioContext.createBiquadFilter()
+    const lowPassNode = audioContext.createBiquadFilter()
+    const gainNode = audioContext.createGain()
+
+    source.buffer = createNoiseBuffer(audioContext, 0.15)
+
+    highPassNode.type = 'highpass'
+    highPassNode.frequency.setValueAtTime(700, now)
+    highPassNode.Q.setValueAtTime(0.5, now)
+
+    lowPassNode.type = 'lowpass'
+    lowPassNode.frequency.setValueAtTime(
+      intensity === 'High' ? 1400 : intensity === 'Mid' ? 1100 : 800, 
+      now
+    )
+    lowPassNode.Q.setValueAtTime(0.7, now)
+
+    const baseGain = intensity === 'High' ? 0.25 : intensity === 'Mid' ? 0.18 : 0.12
+    const adjustedPeak = Math.max(0.0001, baseGain * volumeRatio)
+    const attack = 0.025
+    const decay = 0.05
+
+    gainNode.gain.setValueAtTime(0.0001, now)
+    gainNode.gain.exponentialRampToValueAtTime(adjustedPeak, now + attack)
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + attack + decay)
+
+    source.connect(highPassNode)
+    highPassNode.connect(lowPassNode)
+    lowPassNode.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+
+    source.start(now)
+    source.stop(now + attack + decay + 0.01)
+  }, [createNoiseBuffer, volumeRatio])
+
+  useEffect(() => {
+    if (!isRunning) {
+      startTimeRef.current = null
+      elapsedTimeRef.current = 0 
+      return
+    }
+
+    let schedulerTimerId: number
+    let animationFrameId: number
+    let nextNoteTime = -1
+    let scheduledBeatIndex = 0
+
+    const lookaheadMs = 25.0
+    const scheduleAheadTime = 0.1 
+
+    const scheduler = async () => {
+      const ctx = await ensureAudioContext()
+      
+      if (nextNoteTime === -1) {
+        nextNoteTime = ctx.currentTime + 0.05
+        startTimeRef.current = nextNoteTime 
+      }
+
+      while (nextNoteTime < ctx.currentTime + scheduleAheadTime) {
+        const currentBeatInBar = beatsPerBar === 1 ? 0 : scheduledBeatIndex % beatsPerBar
+        const isBarHead = timeSignature !== 'Free' && currentBeatInBar === 0
+        const intensity: BeatIntensity = timeSignature === 'Free' ? 'Mid' : (isBarHead ? 'High' : 'Mid')
+        
+        if (isAudioEnabled && volumeRatio > 0) {
+          if (clickSound === 'Breath') {
+            playBreathClick(ctx, nextNoteTime, intensity)
+          } else {
+            playOscillatorClick(ctx, nextNoteTime, intensity, clickSound)
+          }
+
+          if (clickSubdivision === 'Eighth') {
+            const eighthTime = nextNoteTime + beatDuration / 2
+            if (clickSound === 'Breath') {
+              playBreathClick(ctx, eighthTime, 'Low')
+            } else {
+              playOscillatorClick(ctx, eighthTime, 'Low', clickSound)
+            }
+          }
+        }
+
+        nextNoteTime += beatDuration
+        scheduledBeatIndex += 1
+      }
+      
+      schedulerTimerId = window.setTimeout(scheduler, lookaheadMs)
+    }
+
+    const renderLoop = () => {
+      const ctx = audioContextRef.current
+      if (ctx && startTimeRef.current !== null) {
+        const now = ctx.currentTime
+        const elapsed = now - startTimeRef.current
+        elapsedTimeRef.current = Math.max(0, elapsed)
+      }
+      animationFrameId = window.requestAnimationFrame(renderLoop)
+    }
+
+    scheduler()
+    animationFrameId = window.requestAnimationFrame(renderLoop)
+
+    return () => {
+      window.clearTimeout(schedulerTimerId)
+      window.cancelAnimationFrame(animationFrameId)
+    }
+  }, [
+    isRunning,
+    isAudioEnabled,
+    beatDuration,
+    beatsPerBar,
+    timeSignature,
+    clickSound,
+    clickSubdivision,
+    volumeRatio,
+    ensureAudioContext,
+    playBreathClick,
+    playOscillatorClick,
+  ])
+
+  return { 
+    ensureAudioContext, 
+    getElapsedTime: useCallback(() => elapsedTimeRef.current, [])
+  }
+}
+
+===== C:\Users\tasuk\dev\void-pulse-canvas\src\hooks\useVoidTune.ts =====
+// C:\Users\tasuk\dev\void-pulse-canvas\src\hooks\useVoidTune.ts
+import { useRef, useCallback, useState, useEffect } from 'react'
+
+export type TuneData = {
+  distance: number
+  noteName: string
+  isStable: boolean
+}
+
+export function useVoidTune(referenceHz: number = 440): {
+  startTuner: () => Promise<void>
+  stopTuner: () => Promise<void>
+  tuneData: TuneData
+} {
+  const [tuneData, setTuneData] = useState<TuneData>({
+    distance: 0,
+    noteName: '--',
+    isStable: false,
+  })
+
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const timerRef = useRef<number | null>(null)
+  const distanceEmaRef = useRef<number>(0)
+  
+  const referenceHzRef = useRef<number>(referenceHz)
+  useEffect(() => {
+    referenceHzRef.current = referenceHz
+  }, [referenceHz])
+
+  // 軽量版Autocorrelation（自己相関）アルゴリズム
+  const autoCorrelate = (buf: Float32Array, sampleRate: number): number => {
+    let SIZE = buf.length
+    let rms = 0
+    for (let i = 0; i < SIZE; i++) {
+      rms += buf[i] * buf[i]
+    }
+    rms = Math.sqrt(rms / SIZE)
+    
+    // 無音判定（RMSゲート）
+    if (rms < 0.01) return -1 
+
+    let r1 = 0, r2 = SIZE - 1, thres = 0.2
+    for (let i = 0; i < SIZE / 2; i++) {
+      if (Math.abs(buf[i]) < thres) { r1 = i; break }
+    }
+    for (let i = 1; i < SIZE / 2; i++) {
+      if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break }
+    }
+
+    buf = buf.subarray(r1, r2)
+    SIZE = buf.length
+
+    const c = new Float32Array(SIZE).fill(0)
+    for (let i = 0; i < SIZE; i++) {
+      for (let j = 0; j < SIZE - i; j++) {
+        c[i] += buf[j] * buf[j + i]
+      }
+    }
+
+    let d = 0
+    while (c[d] > c[d + 1]) d++
+   
+    let maxval = -1, maxpos = -1
+    for (let i = d; i < SIZE; i++) {
+      if (c[i] > maxval) {
+        maxval = c[i]
+        maxpos = i
+      }
+    }
+    let T0 = maxpos
+
+    // 安全化1 & 2: ゼロ除算・境界外アクセスの完全防御
+    if (!T0) return -1
+    if (T0 <= 0 || T0 + 1 >= SIZE) {
+      return sampleRate / T0
+    }
+
+    const x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1]
+    const a = (x1 + x3 - 2 * x2) / 2
+    const b = (x3 - x1) / 2
+    if (a) T0 = T0 - b / (2 * a)
+
+    return sampleRate / T0
+  }
+
+  const startTuner = useCallback(async () => {
+    try {
+      // 既に起動中の場合は重複処理を防ぐ
+      if (audioCtxRef.current) return
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+
+      const ctx = new window.AudioContext()
+      audioCtxRef.current = ctx
+
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 2048
+      analyserRef.current = analyser
+
+      const source = ctx.createMediaStreamSource(stream)
+      const gainNode = ctx.createGain()
+      
+      // 解析用に取り込むが出力は完全に無音にする
+      gainNode.gain.value = 0
+
+      source.connect(analyser)
+      analyser.connect(gainNode)
+      gainNode.connect(ctx.destination)
+
+      const buffer = new Float32Array(analyser.fftSize)
+      const noteStrings = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+      const detectPitch = () => {
+        // 安全化3: 検出ループ停止時の完全防御
+        if (!analyserRef.current || !audioCtxRef.current) {
+          timerRef.current = null
+          return
+        }
+
+        analyser.getFloatTimeDomainData(buffer)
+        const hz = autoCorrelate(buffer, ctx.sampleRate)
+
+        if (hz !== -1 && hz > 0) {
+          const baseRefHz = referenceHzRef.current
+          const noteNum = 12 * (Math.log(hz / baseRefHz) / Math.log(2)) + 69
+          const roundedNote = Math.round(noteNum)
+   
+          const targetHz = baseRefHz * Math.pow(2, (roundedNote - 69) / 12)
+          const cents = 1200 * Math.log2(hz / targetHz)
+
+          const octave = Math.floor(roundedNote / 12) - 1
+          const noteName = noteStrings[((roundedNote % 12) + 12) % 12] + octave
+
+          // Cents base dead zone: ±50セントをUI距離±1にマッピング
+          let targetDistance = 0
+          if (Math.abs(cents) > 2.0) {
+            targetDistance = Math.max(-1, Math.min(1, cents / 50))
+          }
+
+          // EMA平滑化係数の動的切り替え
+          let alpha = 0.4
+          if (Math.abs(targetDistance - distanceEmaRef.current) > 0.5) {
+            alpha = 0.7
+          } else if (Math.abs(targetDistance) < 0.1) {
+            alpha = 0.25
+          }
+
+          distanceEmaRef.current = distanceEmaRef.current + alpha * (targetDistance - distanceEmaRef.current)
+          
+          const smoothedCents = distanceEmaRef.current * 50
+
+          setTuneData({
+            distance: distanceEmaRef.current,
+            noteName,
+            isStable: Math.abs(smoothedCents) < 20
+          })
+        }
+
+        // 負荷対策: requestAnimationFrameではなく、約15fps(66ms)で解析をループ
+        timerRef.current = window.setTimeout(detectPitch, 66)
+      }
+
+      detectPitch()
+    } catch (err) {
+      console.error("Microphone access denied or error:", err)
+    }
+  }, [])
+
+  const stopTuner = useCallback(async () => {
+    // 1. 解析ループの完全停止
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+
+    // 2. マイクリソースの完全解放（LED消灯）
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+
+    // 3. 解析ノードの切断
+    if (analyserRef.current) {
+      analyserRef.current.disconnect()
+      analyserRef.current = null
+    }
+
+    // 4. AudioContextの完全破棄（suspend禁止）
+    if (audioCtxRef.current) {
+      try {
+        await audioCtxRef.current.close()
+      } catch (e) {
+        console.error("AudioContext close error:", e)
+      }
+      audioCtxRef.current = null
+    }
+
+    // 5. 状態と平滑化キャッシュのリセット
+    distanceEmaRef.current = 0
+    setTuneData({ distance: 0, noteName: '--', isStable: false })
+  }, [])
+
+  return { startTuner, stopTuner, tuneData }
+}
+
+===== C:\Users\tasuk\dev\void-pulse-canvas\src\index.css =====
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #050608;
+  color: #f5f5f5;
+  font-family: system-ui, "Segoe UI", sans-serif;
+}
+
+.app {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #050608;
+}
+
+.background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(
+      rgba(5, 6, 8, 0.08),
+      rgba(5, 6, 8, 0.42)
+    ),
+    url("/images/void-bg-01.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: saturate(0.96) contrast(1.16) brightness(0.92);
+  transform: scale(1.018);
+  transform-origin: center;
+}
+
+.background.is-running {
+  animation: imageBreathing var(--beat-duration) ease-in-out infinite;
+}
+
+.background.is-paused {
+  animation: none;
+}
+
+.small-ripple {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 14vmin;
+  height: 14vmin;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 2px solid rgba(
+    220,
+    235,
+    255,
+    calc(0.12 + 0.56 * var(--small-ripple-intensity))
+  );
+  box-shadow:
+    0 0 calc(20px + 42px * var(--small-ripple-intensity))
+      rgba(190, 210, 255, calc(0.08 + 0.34 * var(--small-ripple-intensity))),
+    inset 0 0 calc(14px + 30px * var(--small-ripple-intensity))
+      rgba(220, 235, 255, calc(0.05 + 0.22 * var(--small-ripple-intensity)));
+  mix-blend-mode: screen;
+  transform: translate(-50%, -50%) scale(0.1);
+  animation: smallRipple var(--beat-duration) ease-out forwards;
+}
+
+.large-ripple {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 22vmin;
+  height: 22vmin;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 3px solid rgba(
+    220,
+    235,
+    255,
+    calc(0.18 + 0.48 * var(--large-ripple-intensity))
+  );
+  box-shadow:
+    0 0 calc(36px + 52px * var(--large-ripple-intensity))
+      rgba(190, 210, 255, calc(0.12 + 0.36 * var(--large-ripple-intensity))),
+    inset 0 0 calc(28px + 42px * var(--large-ripple-intensity))
+      rgba(220, 235, 255, calc(0.08 + 0.24 * var(--large-ripple-intensity)));
+  mix-blend-mode: screen;
+  transform: translate(-50%, -50%) scale(0.08);
+  animation: largeRipple var(--large-ripple-duration) ease-out forwards;
+}
+
+.hero {
+  position: relative;
+  z-index: 2;
+  width: min(960px, 94vw);
+  text-align: center;
+  padding: 44px;
+  backdrop-filter: blur(2px);
+  transition:
+    opacity 500ms ease,
+    transform 500ms ease,
+    filter 500ms ease;
+}
+
+.eyebrow {
+  margin: 0 0 20px;
+  color: rgba(220, 230, 245, 0.72);
+  font-size: clamp(16px, 2.4vw, 28px);
+  letter-spacing: 0.08em;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(52px, 8.4vw, 112px);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.subtitle {
+  margin: 34px 0 0;
+  color: rgba(220, 230, 245, 0.78);
+  font-size: clamp(17px, 3vw, 32px);
+  letter-spacing: 0.05em;
+}
+
+.primary-action-row {
+  margin-top: 44px;
+  display: flex;
+  justify-content: center;
+}
+
+.pulse-button {
+  min-width: 260px;
+  padding: 20px 48px;
+  border: 1px solid rgba(220, 235, 255, 0.44);
+  border-radius: 999px;
+  background:
+    radial-gradient(
+      circle at 50% 20%,
+      rgba(220, 235, 255, 0.22),
+      rgba(5, 6, 8, 0.42)
+    );
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 18px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 0 42px rgba(190, 210, 255, 0.2),
+    inset 0 0 24px rgba(220, 235, 255, 0.08);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.pulse-button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(220, 235, 255, 0.68);
+  box-shadow:
+    0 0 58px rgba(190, 210, 255, 0.28),
+    inset 0 0 28px rgba(220, 235, 255, 0.12);
+}
+
+.pulse-button.is-active {
+  background:
+    radial-gradient(
+      circle at 50% 20%,
+      rgba(220, 235, 255, 0.28),
+      rgba(5, 6, 8, 0.34)
+    );
+}
+
+.secondary-controls {
+  margin-top: 26px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compact-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(220, 230, 245, 0.18);
+  border-radius: 999px;
+  background: rgba(5, 6, 8, 0.28);
+  color: rgba(245, 245, 245, 0.68);
+  backdrop-filter: blur(8px);
+  letter-spacing: 0.1em;
+}
+
+.compact-control span {
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.compact-control input,
+.compact-control select {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+  text-align: center;
+}
+
+.compact-control input {
+  width: 68px;
+}
+
+.compact-control select {
+  width: 74px;
+  cursor: pointer;
+}
+
+.sound-control select {
+  width: 132px;
+}
+
+.compact-control option {
+  background: #050608;
+  color: #f5f5f5;
+}
+
+.audio-switch-group {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(220, 230, 245, 0.18);
+  border-radius: 999px;
+  background: rgba(5, 6, 8, 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.audio-switch {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(220, 230, 245, 0.46);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.audio-switch:hover {
+  color: rgba(245, 245, 245, 0.82);
+}
+
+.audio-switch.is-active {
+  background: rgba(220, 235, 255, 0.16);
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    inset 0 0 14px rgba(220, 235, 255, 0.07),
+    0 0 16px rgba(190, 210, 255, 0.1);
+}
+
+.sliders {
+  margin: 22px auto 0;
+  display: grid;
+  gap: 8px;
+  width: min(480px, 90vw);
+  padding: 14px 16px;
+  border: 1px solid rgba(220, 230, 245, 0.12);
+  border-radius: 18px;
+  background: rgba(5, 6, 8, 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.slider-control {
+  display: grid;
+  grid-template-columns: 64px 1fr 32px;
+  align-items: center;
+  gap: 10px;
+  color: rgba(220, 230, 245, 0.58);
+  font-size: 11px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.slider-control input {
+  width: 100%;
+  accent-color: rgba(220, 235, 255, 0.78);
+}
+
+.slider-control em {
+  font-style: normal;
+  text-align: right;
+  color: rgba(245, 245, 245, 0.66);
+}
+
+.status {
+  position: fixed;
+  left: 32px;
+  bottom: 28px;
+  z-index: 3;
+  display: flex;
+  gap: 18px;
+  color: rgba(220, 230, 245, 0.56);
+  font-size: 12px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  transition:
+    opacity 500ms ease,
+    transform 500ms ease,
+    filter 500ms ease;
+}
+
+.ui-panel {
+  will-change: opacity, transform, filter;
+}
+
+.app.ui-visible .ui-panel {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+  pointer-events: auto;
+  transition-duration: 500ms;
+}
+
+.app.ui-hidden .ui-panel {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(3px);
+  pointer-events: none;
+  transition-duration: 1000ms;
+}
+
+.app.ui-hidden {
+  cursor: none;
+}
+
+.app.ui-visible {
+  cursor: default;
+}
+
+@keyframes imageBreathing {
+  0% {
+    filter: saturate(0.98) contrast(1.18)
+      brightness(calc(0.88 + 0.18 * var(--breath-intensity)));
+    transform: scale(calc(1.014 + 0.008 * var(--breath-intensity)));
+  }
+
+  50% {
+    filter: saturate(0.82) contrast(1.08)
+      brightness(calc(0.62 + 0.16 * var(--breath-intensity)));
+    transform: scale(calc(1.026 + 0.038 * var(--breath-intensity)));
+  }
+
+  100% {
+    filter: saturate(0.98) contrast(1.18)
+      brightness(calc(0.88 + 0.18 * var(--breath-intensity)));
+    transform: scale(calc(1.014 + 0.008 * var(--breath-intensity)));
+  }
+}
+
+@keyframes smallRipple {
+  0% {
+    opacity: calc(0.28 + 0.62 * var(--small-ripple-intensity));
+    transform: translate(-50%, -50%) scale(0.1);
+  }
+
+  55% {
+    opacity: calc(0.14 + 0.28 * var(--small-ripple-intensity));
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      scale(calc(1.8 + 1.5 * var(--small-ripple-intensity)));
+  }
+}
+
+@keyframes largeRipple {
+  0% {
+    opacity: calc(0.38 + 0.52 * var(--large-ripple-intensity));
+    transform: translate(-50%, -50%) scale(0.08);
+  }
+
+  55% {
+    opacity: calc(0.16 + 0.32 * var(--large-ripple-intensity));
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      scale(calc(4.8 + 2.4 * var(--large-ripple-intensity)));
+  }
+}
+
+===== C:\Users\tasuk\dev\void-pulse-canvas\src\main.tsx =====
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+
+
+===== C:\Users\tasuk\dev\void-pulse-canvas\src\types\index.ts =====
+export type TimeSignature = '2/4' | '3/4' | '4/4' | 'Free'
+
+export type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
+
+export type ClickSubdivision = 'Quarter' | 'Eighth'
+
+export type VisualEffect = 'Ripple' | 'Line Sweep' | 'Ghost Sweep' | 'None'
+
+export type BackgroundMode = 'Image' | 'Void Black' | 'Warm Gray' | 'Deep Blue' | 'Paper Dark'
+
+export type PresetName = 'Current' | 'Void / Score Float' | 'Void / Practice' | 'Void / Recording' | 'Void / Night' | 'My Saved Preset'
+
+export type BeatIntensity = 'High' | 'Mid' | 'Low'
+
+export type PresetValues = {
+  bpm: number
+  timeSignature: TimeSignature
+  breathIntensity: number
+  smallRippleIntensity: number
+  largeRippleIntensity: number
+  clickSound: ClickSound
+  clickSubdivision: ClickSubdivision
+  visualEffect: VisualEffect
+  volume: number
+  isScoreVisible: boolean
+  scoreOpacity: number
+  scoreScale: number
+  scoreX: number
+  scoreY: number
+  scoreWhiteCut: number
+  scoreInkBoost: number
+  backgroundMode: BackgroundMode
+}
+
+export type SavedSettings = PresetValues & {
+  isDebugEnabled: boolean
+  selectedPreset: PresetName
+  savedPreset: PresetValues | null
+}
+
+export type DebugMetrics = {
+  targetMs: number
+  actualMs: number | null
+  diffMs: number | null
+  maxDiffMs: number
+  beatCount: number
+}
+
+export type PdfSlot = {
+  // pdfjs-distの型解決エラーによる連鎖パース崩壊を防ぐため、anyで防壁を構築。
+  // 描画エンジン内部で処理されるオブジェクトをここで厳密に縛る必要はございません。
+  pdf: any
+  fileName: string
+  pageNumber: number
+  pageCount: number
+}
+
