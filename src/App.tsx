@@ -200,11 +200,14 @@ const isClickSound = (value: unknown): value is ClickSound => {
 }
 
 const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
-  return value === 'Quarter' || value === 'Eighth'
+  return value === 'Quarter' ||
+    value === 'Eighth'
 }
 
 const isVisualEffect = (value: unknown): value is VisualEffect => {
-  return value === 'Ripple' || value === 'Line Sweep' || value === 'Ghost Sweep' || value === 'None'
+  return value === 'Ripple' ||
+    value === 'Line Sweep' || value === 'Ghost Sweep' ||
+    value === 'None'
 }
 
 const isPresetName = (value: unknown): value is PresetName => {
@@ -671,7 +674,7 @@ function App() {
     }
 
     if (backgroundMode === 'Deep Blue') {
-      return {
+       return {
         backgroundImage:
           'radial-gradient(circle at 50% 40%, rgba(22, 40, 66, 0.95), rgba(4, 8, 16, 1) 68%)',
         backgroundColor: '#040810',
@@ -735,6 +738,7 @@ function App() {
 
       osc.connect(gain)
       gain.connect(ctx.destination)
+  
       osc.start()
       oscNodeRef.current = osc
       
@@ -813,15 +817,7 @@ function App() {
           isBar,
           progress,
         })
-    
-        if (isBar) {
-          generated.push({
-            id: i + 1000000,
-            left: 93,
-            isBar,
-            progress,
-          })
-        }
+        // 93%への特別配置を廃止。拍Ghost（時間）の役割に純化させる。
       }
       i -= 1
     }
@@ -847,7 +843,7 @@ function App() {
     setTunePhase('absorb')
 
     setTimeout(() => {
-      void stopTuner()
+       void stopTuner()
       setTunePhase('expand')
     }, 300)
 
@@ -1005,7 +1001,7 @@ function App() {
       temporaryCanvas.height = Math.floor(viewport.height)
 
       await page.render({
-        canvasContext: temporaryContext,
+         canvasContext: temporaryContext,
         viewport,
       }).promise
 
@@ -1050,7 +1046,7 @@ function App() {
         pageCount: pdf.numPages,
       })
 
-      pdfDataCacheRef.current.set(activePdfSlotIndex, bufferForDb.slice(0))
+       pdfDataCacheRef.current.set(activePdfSlotIndex, bufferForDb.slice(0))
 
       await renderPdfPage(activePdfSlotIndex, 1, pdf, file.name)
 
@@ -1128,19 +1124,19 @@ function App() {
           pdfDataCacheRef.current.set(saved.slotIndex, saved.pdfData)
 
           if (saved.slotIndex === 0) {
-            try {
+             try {
               const pdf = await pdfjsLib.getDocument({ data: saved.pdfData.slice(0) }).promise
               newSlots[saved.slotIndex] = {
                 pdf,
                 fileName: saved.fileName,
                 pageNumber: saved.pageNumber,
-                pageCount: saved.pageCount,
+               pageCount: saved.pageCount,
               }
               activePdfToRender = pdf
               activePageToRender = saved.pageNumber
               activeFileName = saved.fileName
             } catch (err) {
-              console.error(`Failed to parse PDF for slot 0`, err)
+               console.error(`Failed to parse PDF for slot 0`, err)
               newSlots[saved.slotIndex] = {
                 pdf: null,
                 fileName: saved.fileName,
@@ -1153,7 +1149,7 @@ function App() {
               pdf: null,
               fileName: saved.fileName,
               pageNumber: saved.pageNumber,
-              pageCount: saved.pageCount,
+               pageCount: saved.pageCount,
             }
           }
         }
@@ -1165,7 +1161,7 @@ function App() {
         if (activePdfToRender) {
           void renderPdfPage(
             0,
-            activePageToRender,
+             activePageToRender,
             activePdfToRender,
             activeFileName
           )
@@ -1180,7 +1176,7 @@ function App() {
     return () => {
       isMounted = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -1204,7 +1200,7 @@ function App() {
   }, [scoreImageSource])
 
   useEffect(() => {
-    if (!isScoreImageLoaded) return
+     if (!isScoreImageLoaded) return
 
     const firstFrameId = window.requestAnimationFrame(() => {
       renderScoreCanvas()
@@ -1374,16 +1370,21 @@ function App() {
 
       {isRunning && (visualEffect === 'Line Sweep' || visualEffect === 'Ghost Sweep') && (
         <div className="sweep-container">
-          {isBarHead && (
+          {timeSignature !== 'Free' && (
             <>
+              {/* 空間の支柱（常駐ベース） */}
+              <div className="structural-pillar-base" style={{ left: '7%' }} />
+              <div className="structural-pillar-base" style={{ left: '93%' }} />
+
+              {/* 支柱の脈動（小節頭レイヤー） */}
               <div
-                key={`flash-left-${beatIndex}`}
-                className="sweep-line is-bar-head"
+                key={`pillar-pulse-left-${Math.floor(beatIndex / beatsPerBar)}`}
+                className="structural-pillar-pulse"
                 style={{ left: '7%' }}
               />
               <div
-                key={`flash-right-${beatIndex}`}
-                className="sweep-line is-bar-head"
+                key={`pillar-pulse-right-${Math.floor(beatIndex / beatsPerBar)}`}
+                className="structural-pillar-pulse"
                 style={{ left: '93%' }}
               />
             </>
@@ -1392,15 +1393,16 @@ function App() {
           <div
             key="sweep-line-main"
             className="sweep-line"
-            style={{
+             style={{
               left: `${sweepLeft}%`,
               animation: 'none'
             }}
           />
 
           {ghosts.map((g) => {
-            const baseOpacity = g.isBar ? 1 : (visualEffect === 'Ghost Sweep' ? 0.4 : 0.25);
-            const fadeCurve = g.isBar ? Math.pow(1 - g.progress, 1.2) : Math.pow(1 - g.progress, 2.5);
+            /* Ghostは時間（拍）のみを純粋に追う。isBarの特別扱い（爆発）を完全に廃止 */
+            const baseOpacity = visualEffect === 'Ghost Sweep' ? 0.75 : 0.45;
+            const fadeCurve = Math.pow(1 - g.progress, 6.0); /* 日本刀のように鋭く減衰 */
 
             return (
               <div
@@ -1409,8 +1411,8 @@ function App() {
                 style={{
                   left: `${g.left}%`,
                   opacity: Math.max(0, baseOpacity * fadeCurve),
-                  transform: `translateX(-50%) scaleX(${1 + g.progress * (g.isBar ? 2.5 : 1.0)})`,
-                  filter: `blur(${g.progress * (g.isBar ? 6 : 3)}px)`,
+                  transform: `translateX(-50%) scaleX(${1 + g.progress * 1.5})`,
+                  filter: `blur(${g.progress * 4}px)`,
                   animation: 'none'
                 }}
               />
@@ -1442,7 +1444,7 @@ function App() {
                 className="pulse-button"
                 style={{ marginLeft: '16px' }}
                 onClick={() => {
-                  setScoreRenderMode('tune')
+                   setScoreRenderMode('tune')
                   requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                       setIsTuneUiVisible(true)
@@ -1493,7 +1495,7 @@ function App() {
               </button>
               
               <button
-                className={`audio-switch ${!isTonePlaying ? 'is-active' : ''}`}
+                 className={`audio-switch ${!isTonePlaying ? 'is-active' : ''}`}
                 onClick={() => setIsTonePlaying(false)}
               >
                 Sound OFF
@@ -1538,7 +1540,7 @@ function App() {
               >
                 <option value="2/4">2/4</option>
                 <option value="3/4">3/4</option>
-                <option value="4/4">4/4</option>
+                 <option value="4/4">4/4</option>
                 <option value="Free">Free</option>
               </select>
             </label>
@@ -1546,18 +1548,18 @@ function App() {
             <label className="compact-control sound-control">
               <span>Sound</span>
               <select
-                value={clickSound}
+                 value={clickSound}
                 onChange={(event) =>
                   updateSettings({
                     clickSound: event.target.value as ClickSound,
                   })
-                }
+               }
               >
                 {clickSoundOptions.map((sound) => (
                   <option key={sound} value={sound}>
                     {sound}
                   </option>
-                ))}
+                 ))}
               </select>
             </label>
 
@@ -1565,18 +1567,18 @@ function App() {
               <span>Click</span>
               <select
                 value={clickSubdivision}
-                onChange={(event) =>
+                 onChange={(event) =>
                   updateSettings({
                     clickSubdivision: event.target.value as ClickSubdivision,
                   })
                 }
-              >
+               >
                 {clickSubdivisionOptions.map((subdivision) => (
                   <option key={subdivision} value={subdivision}>
                     {subdivision}
                   </option>
                 ))}
-              </select>
+               </select>
             </label>
 
             <label className="compact-control sound-control">
@@ -1595,7 +1597,7 @@ function App() {
                   </option>
                 ))}
               </select>
-            </label>
+             </label>
 
             <label className="compact-control sound-control">
               <span>Background</span>
@@ -1608,7 +1610,7 @@ function App() {
                 }
               >
                 {backgroundModeOptions.map((mode) => (
-                  <option key={mode} value={mode}>
+                   <option key={mode} value={mode}>
                     {mode}
                   </option>
                 ))}
@@ -1616,18 +1618,18 @@ function App() {
             </label>
 
             <label className="compact-control sound-control">
-              <span>Effect</span>
+               <span>Effect</span>
               <select
                 value={visualEffect}
                 onChange={(event) =>
                   updateSettings({
                     visualEffect: event.target.value as VisualEffect,
-                  })
+                   })
                 }
               >
                 {visualEffectOptions.map((effect) => (
                   <option key={effect} value={effect}>
-                    {effect}
+                     {effect}
                   </option>
                 ))}
               </select>
@@ -1666,7 +1668,7 @@ function App() {
               </button>
 
               <button className="score-switch" onClick={saveCurrentPreset}>
-                Save Current
+                 Save Current
               </button>
             </div>
 
@@ -1728,21 +1730,21 @@ function App() {
 
               <button
                 className="score-switch"
-                onClick={() => scoreFileInputRef.current?.click()}
+                 onClick={() => scoreFileInputRef.current?.click()}
               >
                 Load PNG
               </button>
 
               <button
                 className="score-switch"
-                onClick={() => scorePdfInputRef.current?.click()}
+                 onClick={() => scorePdfInputRef.current?.click()}
               >
                 Load PDF
               </button>
 
               <button
                 className="score-switch"
-                disabled={!isPdfLoaded || pdfPageNumber <= 1}
+                 disabled={!isPdfLoaded || pdfPageNumber <= 1}
                 onClick={showPreviousPdfPage}
               >
                 PDF Prev
@@ -1750,7 +1752,7 @@ function App() {
 
               <button
                 className="score-switch"
-                disabled={!isPdfLoaded || pdfPageNumber >= pdfPageCount}
+                 disabled={!isPdfLoaded || pdfPageNumber >= pdfPageCount}
                 onClick={showNextPdfPage}
               >
                 PDF Next
@@ -1765,13 +1767,13 @@ function App() {
                 type="range"
                 min="0"
                 max="100"
-                value={volume}
+                 value={volume}
                 onChange={(event) =>
                   updateSettings({
                     volume: Number(event.target.value),
                   })
                 }
-              />
+               />
               <em>{volume}</em>
             </label>
 
@@ -1793,7 +1795,7 @@ function App() {
 
             <label className="slider-control">
               <span>Small</span>
-              <input
+               <input
                 type="range"
                 min="0"
                 max="100"
@@ -1805,7 +1807,7 @@ function App() {
                 }
               />
               <em>{smallRippleIntensity}</em>
-            </label>
+             </label>
 
             <label className="slider-control">
               <span>Large</span>
@@ -1819,7 +1821,7 @@ function App() {
                     largeRippleIntensity: Number(event.target.value),
                   })
                 }
-              />
+               />
               <em>{largeRippleIntensity}</em>
             </label>
 
@@ -1847,7 +1849,7 @@ function App() {
                 max="160"
                 value={scoreScale}
                 onChange={(event) =>
-                  updateSettings({
+                   updateSettings({
                     scoreScale: Number(event.target.value),
                   })
                 }
@@ -1880,7 +1882,7 @@ function App() {
                 value={scoreY}
                 onChange={(event) =>
                   updateSettings({
-                    scoreY: Number(event.target.value),
+                     scoreY: Number(event.target.value),
                   })
                 }
               />
@@ -1888,7 +1890,7 @@ function App() {
             </label>
 
             <label className="slider-control">
-              <span>Paper Cut</span>
+               <span>Paper Cut</span>
               <input
                 type="range"
                 min="50"
@@ -1914,7 +1916,7 @@ function App() {
                   updateSettings({
                     scoreInkBoost: Number(event.target.value),
                   })
-                }
+                 }
               />
               <em>{scoreInkBoost}</em>
             </label>
@@ -1924,7 +1926,7 @@ function App() {
 
       <div className="status ui-panel">
         <span>{safeBpm} BPM</span>
-        <span>{timeSignature}</span>
+         <span>{timeSignature}</span>
         <span>{clickSound}</span>
         <span>{clickSubdivision}</span>
         <span>VOL {volume}</span>
@@ -1954,7 +1956,7 @@ function App() {
           <span>Elapsed: {(elapsedTime).toFixed(2)}s</span>
           <span>Beat Count: {debugMetrics.beatCount}</span>
           <div className={`tune-ui-controls ${scoreRenderMode === 'tune' && isTuneUiVisible ? 'is-visible' : 'is-hidden'}`}>
-            <span>Tune Hz Dist: {tuneData.distance.toFixed(3)}</span>
+           <span>Tune Hz Dist: {tuneData.distance.toFixed(3)}</span>
             <span>Tune Phase: {tunePhase}</span>
           </div>
         </div>

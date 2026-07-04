@@ -31,7 +31,8 @@ body {
   justify-content: flex-start; /* 溢れた時は必ず上から自然に流れる構造 */
   min-height: 100dvh;
   padding: 0;
-  touch-action: none; /* iPad等のネイティブスクロール・スワイプ横取りを完全封殺 */
+  touch-action: none;
+/* iPad等のネイティブスクロール・スワイプ横取りを完全封殺 */
 }
 
 .background {
@@ -166,37 +167,38 @@ body {
   transform: translateX(-50%);
 }
 
-.sweep-line.is-bar-head {
-  animation: sweep-flash 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  z-index: 10;
+/* 空間の支柱（常駐するベースの微弱な光） */
+.structural-pillar-base {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(220, 235, 255, 0.15);
+  box-shadow: 0 0 8px rgba(180, 200, 255, 0.15);
+  transform: translateX(-50%);
+  z-index: 8;
 }
 
-@keyframes sweep-flash {
+/* 空間の支柱（小節頭のみ乗算される脈動レイヤー） */
+.structural-pillar-pulse {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 16px rgba(220, 235, 255, 0.5);
+  transform: translateX(-50%);
+  z-index: 9;
+  /* 閃光ではなく、静かに呼吸して消えていくカーブ */
+  animation: pillar-pulse-fade 1.2s cubic-bezier(0.1, 0.9, 0.3, 1) forwards;
+}
+
+@keyframes pillar-pulse-fade {
   0% {
-    background: linear-gradient(
-      to right,
-      transparent,
-      rgba(255, 255, 255, 0.95),
-      rgba(220, 235, 255, 1),
-      rgba(255, 255, 255, 0.95),
-      transparent
-    );
     opacity: 1;
-    filter: blur(2px);
-    box-shadow: 0 0 12px rgba(255, 255, 255, 0.8), 0 0 24px rgba(180, 200, 255, 0.6);
   }
   100% {
-    background: linear-gradient(
-      to right,
-      transparent,
-      rgba(255, 255, 255, 0.95),
-      rgba(220, 235, 255, 1),
-      rgba(255, 255, 255, 0.95),
-      transparent
-    );
     opacity: 0;
-    filter: blur(0px);
-    box-shadow: none;
   }
 }
 
@@ -591,7 +593,8 @@ h1 {
 
 .tune-container.is-hidden {
   opacity: 0;
-  transition: opacity 0s; /* 終了時のスナップバック現象（一瞬のチラつき）を完全に防止 */
+  transition: opacity 0s;
+/* 終了時のスナップバック現象（一瞬のチラつき）を完全に防止 */
 }
 
 /* クロスフェード対応コンポーネントラッパー */
@@ -734,11 +737,13 @@ h1 {
   body,
   #root,
   .app {
-    min-height: 100dvh; /* 動的ツールバーに完全追従 */
+    min-height: 100dvh;
+/* 動的ツールバーに完全追従 */
   }
 
   .app {
-    touch-action: pan-y; /* 横スワイプ判定を壊さず、スマホでの自然な縦スクロールを優雅に解放 */
+    touch-action: pan-y;
+/* 横スワイプ判定を壊さず、スマホでの自然な縦スクロールを優雅に解放 */
     padding: 16px 12px;
   }
 
@@ -755,7 +760,8 @@ h1 {
   }
 
   h1 {
-    font-size: clamp(38px, 9vw, 48px); /* 横幅はみ出しを確実に防止するモバイル黄金比 */
+    font-size: clamp(38px, 9vw, 48px);
+/* 横幅はみ出しを確実に防止するモバイル黄金比 */
     letter-spacing: -0.04em;
   }
 
@@ -776,15 +782,17 @@ h1 {
 
   .pulse-button {
     width: min(300px, 100%);
-    min-width: 0; /* 固定幅を排し、あらゆるコンパクト画面に適応 */
+    min-width: 0;
+/* 固定幅を排し、あらゆるコンパクト画面に適応 */
     padding: 16px 32px;
     font-size: 15px;
     letter-spacing: 0.14em;
     white-space: nowrap;
-  }
+}
   
   .pulse-button + .pulse-button {
-    margin-left: 0 !important; /* インラインスタイルの残留を完全に上書き隠滅 */
+    margin-left: 0 !important;
+/* インラインスタイルの残留を完全に上書き隠滅 */
   }
 
   /* コントロール・スライダーエリアの適正化 */
@@ -797,27 +805,28 @@ h1 {
   .compact-control {
     padding: 6px 10px;
     font-size: 12px;
-  }
+}
 
   .compact-control input {
     width: 54px;
     font-size: 13px;
-  }
+}
 
   .compact-control select {
     width: 64px;
     font-size: 13px;
-  }
+}
 
   .sound-control select {
-    width: min(105px, 100%); /* 音色の長い文字列がはみ出さないセーフ幅 */
+    width: min(105px, 100%);
+/* 音色の長い文字列がはみ出さないセーフ幅 */
   }
 
   .audio-switch-group,
   .score-switch-group,
   .debug-switch-group {
     padding: 2px;
-  }
+}
 
   .audio-switch,
   .score-switch,
@@ -825,20 +834,20 @@ h1 {
     padding: 6px 10px;
     font-size: 10px;
     letter-spacing: 0.08em;
-  }
+}
 
   .sliders {
     width: 100%;
     padding: 12px 14px;
     margin-top: 20px;
     border-radius: 14px;
-  }
+}
 
   .slider-control {
     grid-template-columns: 56px 1fr 28px;
     gap: 8px;
     font-size: 10px;
-  }
+}
 
   /* ステータスパネルのフロー退避構造（B案の完全実装） */
   .status {
