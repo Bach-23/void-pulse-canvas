@@ -4,7 +4,7 @@ export type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
 
 export type ClickSubdivision = 'Quarter' | 'Eighth'
 
-export type VisualEffect = 'Ripple' | 'Line Sweep' | 'Ghost Sweep' | 'None'
+export type VisualEffect = 'Ripple' | 'Ghost Sweep' | 'None'
 
 export type BackgroundMode = 'Image' | 'Void Black' | 'Warm Gray' | 'Deep Blue' | 'Paper Dark'
 

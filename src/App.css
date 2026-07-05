@@ -84,7 +84,7 @@ body {
 }
 
 /* =========================================
-   Ripple Animations
+   Ripple Animations (呼吸)
    ========================================= */
 .small-ripple {
   position: absolute;
@@ -136,8 +136,39 @@ body {
   animation: largeRipple var(--large-ripple-duration) ease-out forwards;
 }
 
+@keyframes smallRipple {
+  0% {
+    opacity: calc(0.28 + 0.62 * var(--small-ripple-intensity));
+    transform: translate(-50%, -50%) scale(0.1);
+  }
+  55% {
+    opacity: calc(0.14 + 0.28 * var(--small-ripple-intensity));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      scale(calc(1.8 + 1.5 * var(--small-ripple-intensity)));
+  }
+}
+
+/* 空間全体の深い呼吸：小節長に合わせてゆっくりと消えていく */
+@keyframes largeRipple {
+  0% {
+    opacity: calc(0.38 + 0.52 * var(--large-ripple-intensity));
+    transform: translate(-50%, -50%) scale(0.08);
+  }
+  50% {
+    opacity: calc(0.15 + 0.25 * var(--large-ripple-intensity));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      scale(calc(8.0 + 4.0 * var(--large-ripple-intensity)));
+  }
+}
+
 /* =========================================
-   Sweep Animations & Ghosts
+   Ghost Sweep & Pillar (時間と空間)
    ========================================= */
 .sweep-container {
   position: absolute;
@@ -151,6 +182,7 @@ body {
   mix-blend-mode: screen;
 }
 
+/* 時間を可視化する現在の移動ライン */
 .sweep-line {
   position: absolute;
   top: 0;
@@ -165,6 +197,7 @@ body {
     transparent
   );
   transform: translateX(-50%);
+  z-index: 10;
 }
 
 /* 空間の支柱（常駐するベースの微弱な光） */
@@ -189,7 +222,6 @@ body {
   box-shadow: 0 0 16px rgba(220, 235, 255, 0.5);
   transform: translateX(-50%);
   z-index: 9;
-  /* 閃光ではなく、静かに呼吸して消えていくカーブ */
   animation: pillar-pulse-fade 1.2s cubic-bezier(0.1, 0.9, 0.3, 1) forwards;
 }
 
@@ -200,15 +232,6 @@ body {
   100% {
     opacity: 0;
   }
-}
-
-.line-sweep-ghost {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(255, 255, 255, 1);
-  transform-origin: center;
 }
 
 .ghost-sweep-ghost {
@@ -539,36 +562,6 @@ h1 {
     filter: saturate(0.98) contrast(1.18)
       brightness(calc(0.88 + 0.18 * var(--breath-intensity)));
     transform: scale(calc(1.014 + 0.008 * var(--breath-intensity)));
-  }
-}
-
-@keyframes smallRipple {
-  0% {
-    opacity: calc(0.28 + 0.62 * var(--small-ripple-intensity));
-    transform: translate(-50%, -50%) scale(0.1);
-  }
-  55% {
-    opacity: calc(0.14 + 0.28 * var(--small-ripple-intensity));
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%)
-      scale(calc(1.8 + 1.5 * var(--small-ripple-intensity)));
-  }
-}
-
-@keyframes largeRipple {
-  0% {
-    opacity: calc(0.38 + 0.52 * var(--large-ripple-intensity));
-    transform: translate(-50%, -50%) scale(0.08);
-  }
-  55% {
-    opacity: calc(0.16 + 0.32 * var(--large-ripple-intensity));
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%)
-      scale(calc(4.8 + 2.4 * var(--large-ripple-intensity)));
   }
 }
 

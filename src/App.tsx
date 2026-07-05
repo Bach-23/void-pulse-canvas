@@ -140,7 +140,7 @@ const clickSoundOptions: ClickSound[] = [
 ]
 
 const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth']
-const visualEffectOptions: VisualEffect[] = ['Ripple', 'Line Sweep', 'Ghost Sweep', 'None']
+const visualEffectOptions: VisualEffect[] = ['Ripple', 'Ghost Sweep', 'None']
 
 const presetOptions: PresetName[] = [
   'Current',
@@ -206,7 +206,7 @@ const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
 
 const isVisualEffect = (value: unknown): value is VisualEffect => {
   return value === 'Ripple' ||
-    value === 'Line Sweep' || value === 'Ghost Sweep' ||
+    value === 'Ghost Sweep' ||
     value === 'None'
 }
 
@@ -772,15 +772,9 @@ function App() {
 
   const beatIndex = elapsedTime > 0 ? Math.floor(elapsedTime / beatDuration) : 0
   const currentBeat = beatsPerBar === 1 ? 0 : beatIndex % beatsPerBar
-  const isBarHead = timeSignature !== 'Free' && currentBeat === 0
 
   const sweepProgress = elapsedTime > 0 ? (elapsedTime % (beatDuration * beatsPerBar)) / (beatDuration * beatsPerBar) : 0
   const sweepLeft = timeSignature === 'Free' ? 7 : 7 + sweepProgress * 86
-
-  const getGhostLifeTime = (vEffect: VisualEffect, isBar: boolean) => {
-    if (vEffect === 'Ghost Sweep') return isBar ? 7.0 : 4.0;
-    return isBar ? 2.0 : 1.2;
-  }
 
   const ghosts = useMemo<{
     id: number
@@ -788,7 +782,7 @@ function App() {
     isBar: boolean
     progress: number
   }[]>(() => {
-    if (!isRunning || elapsedTime === 0 || (visualEffect !== 'Line Sweep' && visualEffect !== 'Ghost Sweep')) return []
+    if (!isRunning || elapsedTime === 0 || visualEffect !== 'Ghost Sweep') return []
 
     const generated: {
       id: number
@@ -800,29 +794,43 @@ function App() {
     const exactBeat = elapsedTime / beatDuration
     let i = beatIndex
 
-    const maxSearchBeats = Math.ceil(7.0 / beatDuration) + 1
+    // 寿命を「秒」ではなく「拍数」で固定
+    const GHOST_LIFE_BEATS_BAR = 12; // 小節頭は12拍分（約3小節）残す
+    const GHOST_LIFE_BEATS_NORMAL = 8; // 通常拍は8拍分（約2小節）残す
+
+    const maxSearchBeats = GHOST_LIFE_BEATS_BAR + 1
 
     while (i > beatIndex - maxSearchBeats && i >= 0) {
       const beatInBar = beatsPerBar === 1 ? 0 : i % beatsPerBar
       const isBar = timeSignature !== 'Free' && beatInBar === 0
       
-      const ageSeconds = (exactBeat - i) * beatDuration
-      const lifeTime = getGhostLifeTime(visualEffect, isBar)
-      const progress = ageSeconds / lifeTime
+      const ageBeats = exactBeat - i
+      const lifeTimeBeats = isBar ? GHOST_LIFE_BEATS_BAR : GHOST_LIFE_BEATS_NORMAL
+      const progress = ageBeats / lifeTimeBeats
 
       if (progress <= 1) {
-        generated.push({
-          id: i,
-          left: timeSignature === 'Free' ? 7 : 7 + (beatInBar / beatsPerBar) * 86,
-          isBar,
-          progress,
-        })
-        // 93%への特別配置を廃止。拍Ghost（時間）の役割に純化させる。
+        if (timeSignature === 'Free') {
+          // Free時は両端に等しくGhost（発光）を生成
+          generated.push({ id: i, left: 7, isBar: false, progress })
+          generated.push({ id: i + 1000000, left: 93, isBar: false, progress })
+        } else {
+          // 通常時はSweepLeftに従いGhostを生成
+          generated.push({
+            id: i,
+            left: 7 + (beatInBar / beatsPerBar) * 86,
+            isBar,
+            progress,
+          })
+          // 小節頭は右端（93%）にも鏡像Ghostを生成し対称性を保つ
+          if (isBar) {
+            generated.push({ id: i + 1000000, left: 93, isBar, progress })
+          }
+        }
       }
       i -= 1
     }
     return generated
-  }, [elapsedTime, beatIndex, visualEffect, isRunning, beatsPerBar, timeSignature, beatDuration])
+  }, [elapsedTime, beatIndex, visualEffect, isRunning, beatsPerBar, timeSignature])
 
   const turnAudioOn = async () => {
     await ensureAudioContext()
@@ -1362,20 +1370,20 @@ function App() {
       {isRunning && visualEffect === 'Ripple' && (
         <>
           <div key={`small-${beatIndex}`} className="small-ripple" />
-          {isBarHead && (
-            <div key={`large-${beatIndex}`} className="large-ripple" />
+          {timeSignature !== 'Free' && (
+            <div key={`large-${Math.floor(beatIndex / beatsPerBar)}`} className="large-ripple" />
           )}
         </>
       )}
 
-      {isRunning && (visualEffect === 'Line Sweep' || visualEffect === 'Ghost Sweep') && (
+      {isRunning && visualEffect === 'Ghost Sweep' && (
         <div className="sweep-container">
+          {/* 空間の支柱（常駐ベース）はFree時でも常に空間を定義するために残す */}
+          <div className="structural-pillar-base" style={{ left: '7%' }} />
+          <div className="structural-pillar-base" style={{ left: '93%' }} />
+
           {timeSignature !== 'Free' && (
             <>
-              {/* 空間の支柱（常駐ベース） */}
-              <div className="structural-pillar-base" style={{ left: '7%' }} />
-              <div className="structural-pillar-base" style={{ left: '93%' }} />
-
               {/* 支柱の脈動（小節頭レイヤー） */}
               <div
                 key={`pillar-pulse-left-${Math.floor(beatIndex / beatsPerBar)}`}
@@ -1387,32 +1395,32 @@ function App() {
                 className="structural-pillar-pulse"
                 style={{ left: '93%' }}
               />
+
+              {/* 時間を可視化する現在の移動ライン（Free時は停止・非表示） */}
+              <div
+                key="sweep-line-main"
+                className="sweep-line"
+                 style={{
+                  left: `${sweepLeft}%`,
+                  animation: 'none'
+                }}
+              />
             </>
           )}
 
-          <div
-            key="sweep-line-main"
-            className="sweep-line"
-             style={{
-              left: `${sweepLeft}%`,
-              animation: 'none'
-            }}
-          />
-
           {ghosts.map((g) => {
-            /* Ghostは時間（拍）のみを純粋に追う。isBarの特別扱い（爆発）を完全に廃止 */
-            const baseOpacity = visualEffect === 'Ghost Sweep' ? 0.75 : 0.45;
-            const fadeCurve = Math.pow(1 - g.progress, 6.0); /* 日本刀のように鋭く減衰 */
+            const baseOpacity = g.isBar ? 1 : 0.75;
+            const fadeCurve = g.isBar ? Math.pow(1 - g.progress, 2.5) : Math.pow(1 - g.progress, 6.0);
 
             return (
               <div
                 key={g.id}
-                className={visualEffect === 'Ghost Sweep' ? "ghost-sweep-ghost" : "line-sweep-ghost"}
+                className="ghost-sweep-ghost"
                 style={{
                   left: `${g.left}%`,
                   opacity: Math.max(0, baseOpacity * fadeCurve),
-                  transform: `translateX(-50%) scaleX(${1 + g.progress * 1.5})`,
-                  filter: `blur(${g.progress * 4}px)`,
+                  transform: `translateX(-50%) scaleX(${1 + g.progress * (g.isBar ? 2.5 : 1.5)})`,
+                  filter: `blur(${g.progress * (g.isBar ? 6 : 4)}px)`,
                   animation: 'none'
                 }}
               />
