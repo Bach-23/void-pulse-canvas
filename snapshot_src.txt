@@ -85,7 +85,7 @@ body {
 }
 
 /* =========================================
-   Ripple Animations
+   Ripple Animations (呼吸)
    ========================================= */
 .small-ripple {
   position: absolute;
@@ -137,8 +137,39 @@ body {
   animation: largeRipple var(--large-ripple-duration) ease-out forwards;
 }
 
+@keyframes smallRipple {
+  0% {
+    opacity: calc(0.28 + 0.62 * var(--small-ripple-intensity));
+    transform: translate(-50%, -50%) scale(0.1);
+  }
+  55% {
+    opacity: calc(0.14 + 0.28 * var(--small-ripple-intensity));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      scale(calc(1.8 + 1.5 * var(--small-ripple-intensity)));
+  }
+}
+
+/* 空間全体の深い呼吸：小節長に合わせてゆっくりと消えていく */
+@keyframes largeRipple {
+  0% {
+    opacity: calc(0.38 + 0.52 * var(--large-ripple-intensity));
+    transform: translate(-50%, -50%) scale(0.08);
+  }
+  50% {
+    opacity: calc(0.15 + 0.25 * var(--large-ripple-intensity));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      scale(calc(8.0 + 4.0 * var(--large-ripple-intensity)));
+  }
+}
+
 /* =========================================
-   Sweep Animations & Ghosts
+   Ghost Sweep & Pillar (時間と空間)
    ========================================= */
 .sweep-container {
   position: absolute;
@@ -152,6 +183,7 @@ body {
   mix-blend-mode: screen;
 }
 
+/* 時間を可視化する現在の移動ライン */
 .sweep-line {
   position: absolute;
   top: 0;
@@ -166,6 +198,7 @@ body {
     transparent
   );
   transform: translateX(-50%);
+  z-index: 10;
 }
 
 /* 空間の支柱（常駐するベースの微弱な光） */
@@ -190,7 +223,6 @@ body {
   box-shadow: 0 0 16px rgba(220, 235, 255, 0.5);
   transform: translateX(-50%);
   z-index: 9;
-  /* 閃光ではなく、静かに呼吸して消えていくカーブ */
   animation: pillar-pulse-fade 1.2s cubic-bezier(0.1, 0.9, 0.3, 1) forwards;
 }
 
@@ -201,15 +233,6 @@ body {
   100% {
     opacity: 0;
   }
-}
-
-.line-sweep-ghost {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(255, 255, 255, 1);
-  transform-origin: center;
 }
 
 .ghost-sweep-ghost {
@@ -543,36 +566,6 @@ h1 {
   }
 }
 
-@keyframes smallRipple {
-  0% {
-    opacity: calc(0.28 + 0.62 * var(--small-ripple-intensity));
-    transform: translate(-50%, -50%) scale(0.1);
-  }
-  55% {
-    opacity: calc(0.14 + 0.28 * var(--small-ripple-intensity));
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%)
-      scale(calc(1.8 + 1.5 * var(--small-ripple-intensity)));
-  }
-}
-
-@keyframes largeRipple {
-  0% {
-    opacity: calc(0.38 + 0.52 * var(--large-ripple-intensity));
-    transform: translate(-50%, -50%) scale(0.08);
-  }
-  55% {
-    opacity: calc(0.16 + 0.32 * var(--large-ripple-intensity));
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%)
-      scale(calc(4.8 + 2.4 * var(--large-ripple-intensity)));
-  }
-}
-
 /* =========================================
    Void Tune & Zanshin Transition Styles
    ========================================= */
@@ -897,338 +890,31 @@ import type {
   DebugMetrics,
   PdfSlot,
 } from './types'
+
+import {
+  saveSlotToDB,
+  loadSlotsFromDB,
+  updateSlotPageInDB,
+  clearPdfSlotsFromDB,
+} from './utils/db'
+
+import {
+  STORAGE_KEY,
+  clickSoundOptions,
+  clickSubdivisionOptions,
+  visualEffectOptions,
+  presetOptions,
+  backgroundModeOptions,
+} from './utils/constants'
+
+import {
+  createInitialPdfSlots,
+  loadSettings,
+} from './utils/settings'
+
 import './App.css'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
-
-const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
-const DEFAULT_SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
-const PDF_SLOT_COUNT = 10
-
-const DB_NAME = 'VoidPulseCanvasDB'
-const DB_VERSION = 1
-const STORE_NAME = 'pdfSlots'
-
-const openDB = (): Promise<IDBDatabase> => {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
-      const db = request.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'slotIndex' })
-      }
-    }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
-}
-
-const saveSlotToDB = async (
-  slotIndex: number,
-  pdfData: ArrayBuffer,
-  fileName: string,
-  pageNumber: number,
-  pageCount: number
-): Promise<void> => {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite')
-    const store = tx.objectStore(STORE_NAME)
-    store.put({ slotIndex, pdfData, fileName, pageNumber, pageCount })
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
-
-const loadSlotsFromDB = async (): Promise<any[]> => {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly')
-    const store = tx.objectStore(STORE_NAME)
-    const request = store.getAll()
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
-}
-
-const updateSlotPageInDB = async (slotIndex: number, pageNumber: number): Promise<void> => {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite')
-    const store = tx.objectStore(STORE_NAME)
-    const request = store.get(slotIndex)
-    request.onsuccess = () => {
-      const data = request.result
-      if (data) {
-        data.pageNumber = pageNumber
-        store.put(data)
-      }
-    }
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
-
-const clearPdfSlotsFromDB = async (): Promise<void> => {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite')
-    const store = tx.objectStore(STORE_NAME)
-    store.clear()
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
-
-const defaultPresetValues: PresetValues = {
-  bpm: 105,
-  timeSignature: '4/4',
-  breathIntensity: 40,
-  smallRippleIntensity: 100,
-  largeRippleIntensity: 40,
-  clickSound: 'Soft Tick',
-  clickSubdivision: 'Quarter',
-  visualEffect: 'Ripple',
-  volume: 70,
-  isScoreVisible: false,
-  scoreOpacity: 70,
-  scoreScale: 72,
-  scoreX: 0,
-  scoreY: 0,
-  scoreWhiteCut: 80,
-  scoreInkBoost: 30,
-  backgroundMode: 'Image',
-}
-
-const defaultSettings: SavedSettings = {
-  ...defaultPresetValues,
-  isDebugEnabled: false,
-  selectedPreset: 'Current',
-  savedPreset: null,
-}
-
-const clickSoundOptions: ClickSound[] = [
-  'Soft Tick',
-  'Wood',
-  'Metal',
-  'Breath',
-  'Muted Key',
-]
-
-const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth']
-const visualEffectOptions: VisualEffect[] = ['Ripple', 'Line Sweep', 'Ghost Sweep', 'None']
-
-const presetOptions: PresetName[] = [
-  'Current',
-  'Void / Score Float',
-  'Void / Practice',
-  'Void / Recording',
-  'Void / Night',
-  'My Saved Preset',
-]
-
-const backgroundModeOptions: BackgroundMode[] = [
-  'Image',
-  'Void Black',
-  'Warm Gray',
-  'Deep Blue',
-  'Paper Dark',
-]
-
-const createEmptyPdfSlot = (): PdfSlot => ({
-  pdf: null,
-  fileName: '',
-  pageNumber: 1,
-  pageCount: 0,
-})
-
-const createInitialPdfSlots = (): PdfSlot[] =>
-  Array.from({ length: PDF_SLOT_COUNT }, () => createEmptyPdfSlot())
-
-const clampNumber = (
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number,
-) => {
-  if (typeof value !== 'number') return fallback
-  if (Number.isNaN(value)) return fallback
-  return Math.min(Math.max(value, min), max)
-}
-
-const isTimeSignature = (value: unknown): value is TimeSignature => {
-  return (
-    value === '2/4' ||
-    value === '3/4' ||
-    value === '4/4' ||
-    value === 'Free'
-  )
-}
-
-const isClickSound = (value: unknown): value is ClickSound => {
-  return (
-    value === 'Soft Tick' ||
-    value === 'Wood' ||
-    value === 'Metal' ||
-    value === 'Breath' ||
-    value === 'Muted Key'
-  )
-}
-
-const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
-  return value === 'Quarter' ||
-    value === 'Eighth'
-}
-
-const isVisualEffect = (value: unknown): value is VisualEffect => {
-  return value === 'Ripple' ||
-    value === 'Line Sweep' || value === 'Ghost Sweep' ||
-    value === 'None'
-}
-
-const isPresetName = (value: unknown): value is PresetName => {
-  return (
-    value === 'Current' ||
-    value === 'Void / Score Float' ||
-    value === 'Void / Practice' ||
-    value === 'Void / Recording' ||
-    value === 'Void / Night' ||
-    value === 'My Saved Preset'
-  )
-}
-
-const isBackgroundMode = (value: unknown): value is BackgroundMode => {
-  return (
-    value === 'Image' ||
-    value === 'Void Black' ||
-    value === 'Warm Gray' ||
-    value === 'Deep Blue' ||
-    value === 'Paper Dark'
-  )
-}
-
-const normalizePresetValues = (
-  value: Partial<PresetValues> | null | undefined,
-  fallback: PresetValues,
-): PresetValues => {
-  return {
-    bpm: clampNumber(value?.bpm, 30, 240, fallback.bpm),
-
-    timeSignature: isTimeSignature(value?.timeSignature)
-      ? value.timeSignature
-      : fallback.timeSignature,
-
-    breathIntensity: clampNumber(
-      value?.breathIntensity,
-      0,
-      100,
-      fallback.breathIntensity,
-    ),
-
-    smallRippleIntensity: clampNumber(
-      value?.smallRippleIntensity,
-      0,
-      100,
-      fallback.smallRippleIntensity,
-    ),
-
-    largeRippleIntensity: clampNumber(
-      value?.largeRippleIntensity,
-      0,
-      100,
-      fallback.largeRippleIntensity,
-    ),
-
-    clickSound: isClickSound(value?.clickSound)
-      ? value.clickSound
-      : fallback.clickSound,
-
-    clickSubdivision: isClickSubdivision(value?.clickSubdivision)
-      ? value.clickSubdivision
-      : fallback.clickSubdivision,
-
-    visualEffect: isVisualEffect(value?.visualEffect)
-      ? value.visualEffect
-      : fallback.visualEffect,
-
-    volume: clampNumber(value?.volume, 0, 100, fallback.volume),
-
-    isScoreVisible:
-      typeof value?.isScoreVisible === 'boolean'
-        ? value.isScoreVisible
-        : fallback.isScoreVisible,
-
-    scoreOpacity: clampNumber(
-      value?.scoreOpacity,
-      0,
-      100,
-      fallback.scoreOpacity,
-    ),
-
-    scoreScale: clampNumber(value?.scoreScale, 20, 160, fallback.scoreScale),
-
-    scoreX: clampNumber(value?.scoreX, -400, 400, fallback.scoreX),
-
-    scoreY: clampNumber(value?.scoreY, -300, 300, fallback.scoreY),
-
-    scoreWhiteCut: clampNumber(
-      value?.scoreWhiteCut,
-      50,
-      95,
-      fallback.scoreWhiteCut,
-    ),
-
-    scoreInkBoost: clampNumber(
-      value?.scoreInkBoost,
-      0,
-      60,
-      fallback.scoreInkBoost,
-    ),
-
-    backgroundMode: isBackgroundMode(value?.backgroundMode)
-      ? value.backgroundMode
-      : fallback.backgroundMode,
-  }
-}
-
-function loadSettings(): SavedSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-
-    if (!raw) {
-      return defaultSettings
-    }
-
-    const parsed = JSON.parse(raw) as Partial<SavedSettings>
-
-    const normalizedPresetValues = normalizePresetValues(
-      parsed,
-      defaultPresetValues,
-    )
-
-    const savedPreset =
-      parsed.savedPreset && typeof parsed.savedPreset === 'object'
-        ? normalizePresetValues(parsed.savedPreset, defaultPresetValues)
-        : null
-
-    return {
-      ...normalizedPresetValues,
-
-      isDebugEnabled:
-        typeof parsed.isDebugEnabled === 'boolean'
-          ? parsed.isDebugEnabled
-          : defaultSettings.isDebugEnabled,
-
-      selectedPreset: isPresetName(parsed.selectedPreset)
-        ? parsed.selectedPreset
-        : defaultSettings.selectedPreset,
-
-      savedPreset,
-    }
-  } catch {
-    return defaultSettings
-  }
-}
 
 function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs: number = 400) {
   const startPos = useRef<{ x: number; y: number; time: number } | null>(null)
@@ -1294,7 +980,7 @@ function App() {
 
   const [isScoreImageLoaded, setIsScoreImageLoaded] = useState(false)
   const [scoreImageSource, setScoreImageSource] = useState(
-    DEFAULT_SCORE_IMAGE_SRC,
+    '/images/score-overlay-01.png',
   )
   const [scoreImageName, setScoreImageName] = useState('Default Score')
 
@@ -1648,14 +1334,12 @@ function App() {
 
   const beatIndex = elapsedTime > 0 ? Math.floor(elapsedTime / beatDuration) : 0
   const currentBeat = beatsPerBar === 1 ? 0 : beatIndex % beatsPerBar
-  const isBarHead = timeSignature !== 'Free' && currentBeat === 0
 
   const sweepProgress = elapsedTime > 0 ? (elapsedTime % (beatDuration * beatsPerBar)) / (beatDuration * beatsPerBar) : 0
   const sweepLeft = timeSignature === 'Free' ? 7 : 7 + sweepProgress * 86
 
-  const getGhostLifeTime = (vEffect: VisualEffect, isBar: boolean) => {
-    if (vEffect === 'Ghost Sweep') return isBar ? 7.0 : 4.0;
-    return isBar ? 2.0 : 1.2;
+  const getGhostLifeTime = (isBar: boolean) => {
+    return isBar ? 7.0 : 4.0;
   }
 
   const ghosts = useMemo<{
@@ -1664,7 +1348,7 @@ function App() {
     isBar: boolean
     progress: number
   }[]>(() => {
-    if (!isRunning || elapsedTime === 0 || (visualEffect !== 'Line Sweep' && visualEffect !== 'Ghost Sweep')) return []
+    if (!isRunning || elapsedTime === 0 || visualEffect !== 'Ghost Sweep') return []
 
     const generated: {
       id: number
@@ -1683,17 +1367,24 @@ function App() {
       const isBar = timeSignature !== 'Free' && beatInBar === 0
       
       const ageSeconds = (exactBeat - i) * beatDuration
-      const lifeTime = getGhostLifeTime(visualEffect, isBar)
+      const lifeTime = getGhostLifeTime(isBar)
       const progress = ageSeconds / lifeTime
 
       if (progress <= 1) {
-        generated.push({
-          id: i,
-          left: timeSignature === 'Free' ? 7 : 7 + (beatInBar / beatsPerBar) * 86,
-          isBar,
-          progress,
-        })
-        // 93%への特別配置を廃止。拍Ghost（時間）の役割に純化させる。
+        if (timeSignature === 'Free') {
+          generated.push({ id: i, left: 7, isBar: false, progress })
+          generated.push({ id: i + 1000000, left: 93, isBar: false, progress })
+        } else {
+          generated.push({
+            id: i,
+            left: 7 + (beatInBar / beatsPerBar) * 86,
+            isBar,
+            progress,
+          })
+          if (isBar) {
+            generated.push({ id: i + 1000000, left: 93, isBar, progress })
+          }
+        }
       }
       i -= 1
     }
@@ -2238,21 +1929,19 @@ function App() {
       {isRunning && visualEffect === 'Ripple' && (
         <>
           <div key={`small-${beatIndex}`} className="small-ripple" />
-          {isBarHead && (
-            <div key={`large-${beatIndex}`} className="large-ripple" />
+          {timeSignature !== 'Free' && (
+            <div key={`large-${Math.floor(beatIndex / beatsPerBar)}`} className="large-ripple" />
           )}
         </>
       )}
 
-      {isRunning && (visualEffect === 'Line Sweep' || visualEffect === 'Ghost Sweep') && (
+      {isRunning && visualEffect === 'Ghost Sweep' && (
         <div className="sweep-container">
+          <div className="structural-pillar-base" style={{ left: '7%' }} />
+          <div className="structural-pillar-base" style={{ left: '93%' }} />
+
           {timeSignature !== 'Free' && (
             <>
-              {/* 空間の支柱（常駐ベース） */}
-              <div className="structural-pillar-base" style={{ left: '7%' }} />
-              <div className="structural-pillar-base" style={{ left: '93%' }} />
-
-              {/* 支柱の脈動（小節頭レイヤー） */}
               <div
                 key={`pillar-pulse-left-${Math.floor(beatIndex / beatsPerBar)}`}
                 className="structural-pillar-pulse"
@@ -2263,32 +1952,31 @@ function App() {
                 className="structural-pillar-pulse"
                 style={{ left: '93%' }}
               />
+
+              <div
+                key="sweep-line-main"
+                className="sweep-line"
+                 style={{
+                  left: `${sweepLeft}%`,
+                  animation: 'none'
+                }}
+              />
             </>
           )}
 
-          <div
-            key="sweep-line-main"
-            className="sweep-line"
-             style={{
-              left: `${sweepLeft}%`,
-              animation: 'none'
-            }}
-          />
-
           {ghosts.map((g) => {
-            /* Ghostは時間（拍）のみを純粋に追う。isBarの特別扱い（爆発）を完全に廃止 */
-            const baseOpacity = visualEffect === 'Ghost Sweep' ? 0.75 : 0.45;
-            const fadeCurve = Math.pow(1 - g.progress, 6.0); /* 日本刀のように鋭く減衰 */
+            const baseOpacity = g.isBar ? 1 : 0.75;
+            const fadeCurve = g.isBar ? Math.pow(1 - g.progress, 2.5) : Math.pow(1 - g.progress, 6.0);
 
             return (
               <div
                 key={g.id}
-                className={visualEffect === 'Ghost Sweep' ? "ghost-sweep-ghost" : "line-sweep-ghost"}
+                className="ghost-sweep-ghost"
                 style={{
                   left: `${g.left}%`,
                   opacity: Math.max(0, baseOpacity * fadeCurve),
-                  transform: `translateX(-50%) scaleX(${1 + g.progress * 1.5})`,
-                  filter: `blur(${g.progress * 4}px)`,
+                  transform: `translateX(-50%) scaleX(${1 + g.progress * (g.isBar ? 2.5 : 1.5)})`,
+                  filter: `blur(${g.progress * (g.isBar ? 6 : 4)}px)`,
                   animation: 'none'
                 }}
               />
@@ -3783,7 +3471,7 @@ export type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
 
 export type ClickSubdivision = 'Quarter' | 'Eighth'
 
-export type VisualEffect = 'Ripple' | 'Line Sweep' | 'Ghost Sweep' | 'None'
+export type VisualEffect = 'Ripple' | 'Ghost Sweep' | 'None'
 
 export type BackgroundMode = 'Image' | 'Void Black' | 'Warm Gray' | 'Deep Blue' | 'Paper Dark'
 
@@ -3832,5 +3520,370 @@ export type PdfSlot = {
   fileName: string
   pageNumber: number
   pageCount: number
+}
+
+===== C:\Users\tasuk\dev\void-pulse-canvas\src\utils\constants.ts =====
+// src/utils/constants.ts
+import type {
+  TimeSignature,
+  ClickSound,
+  ClickSubdivision,
+  VisualEffect,
+  BackgroundMode,
+  PresetName,
+  PresetValues,
+  SavedSettings,
+} from '../types'
+
+export const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
+export const DEFAULT_SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
+export const PDF_SLOT_COUNT = 10
+
+export const defaultPresetValues: PresetValues = {
+  bpm: 105,
+  timeSignature: '4/4',
+  breathIntensity: 40,
+  smallRippleIntensity: 100,
+  largeRippleIntensity: 40,
+  clickSound: 'Soft Tick',
+  clickSubdivision: 'Quarter',
+  visualEffect: 'Ripple',
+  volume: 70,
+  isScoreVisible: false,
+  scoreOpacity: 70,
+  scoreScale: 72,
+  scoreX: 0,
+  scoreY: 0,
+  scoreWhiteCut: 80,
+  scoreInkBoost: 30,
+  backgroundMode: 'Image',
+}
+
+export const defaultSettings: SavedSettings = {
+  ...defaultPresetValues,
+  isDebugEnabled: false,
+  selectedPreset: 'Current',
+  savedPreset: null,
+}
+
+export const clickSoundOptions: ClickSound[] = [
+  'Soft Tick',
+  'Wood',
+  'Metal',
+  'Breath',
+  'Muted Key',
+]
+
+export const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth']
+export const visualEffectOptions: VisualEffect[] = ['Ripple', 'Ghost Sweep', 'None']
+
+export const presetOptions: PresetName[] = [
+  'Current',
+  'Void / Score Float',
+  'Void / Practice',
+  'Void / Recording',
+  'Void / Night',
+  'My Saved Preset',
+]
+
+export const backgroundModeOptions: BackgroundMode[] = [
+  'Image',
+  'Void Black',
+  'Warm Gray',
+  'Deep Blue',
+  'Paper Dark',
+]
+
+===== C:\Users\tasuk\dev\void-pulse-canvas\src\utils\db.ts =====
+// src/utils/db.ts
+const DB_NAME = 'VoidPulseCanvasDB'
+const DB_VERSION = 1
+const STORE_NAME = 'pdfSlots'
+
+export const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'slotIndex' })
+      }
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+export const saveSlotToDB = async (
+  slotIndex: number,
+  pdfData: ArrayBuffer,
+  fileName: string,
+  pageNumber: number,
+  pageCount: number
+): Promise<void> => {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    store.put({ slotIndex, pdfData, fileName, pageNumber, pageCount })
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+export const loadSlotsFromDB = async (): Promise<any[]> => {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const store = tx.objectStore(STORE_NAME)
+    const request = store.getAll()
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+export const updateSlotPageInDB = async (slotIndex: number, pageNumber: number): Promise<void> => {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    const request = store.get(slotIndex)
+    request.onsuccess = () => {
+      const data = request.result
+      if (data) {
+        data.pageNumber = pageNumber
+        store.put(data)
+      }
+    }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+export const clearPdfSlotsFromDB = async (): Promise<void> => {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    store.clear()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+===== C:\Users\tasuk\dev\void-pulse-canvas\src\utils\settings.ts =====
+// src/utils/settings.ts
+import type {
+  TimeSignature,
+  ClickSound,
+  ClickSubdivision,
+  VisualEffect,
+  BackgroundMode,
+  PresetName,
+  PresetValues,
+  SavedSettings,
+  PdfSlot,
+} from '../types'
+
+import {
+  STORAGE_KEY,
+  PDF_SLOT_COUNT,
+  defaultPresetValues,
+  defaultSettings,
+} from './constants'
+
+export const createEmptyPdfSlot = (): PdfSlot => ({
+  pdf: null,
+  fileName: '',
+  pageNumber: 1,
+  pageCount: 0,
+})
+
+export const createInitialPdfSlots = (): PdfSlot[] =>
+  Array.from({ length: PDF_SLOT_COUNT }, () => createEmptyPdfSlot())
+
+export const clampNumber = (
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+) => {
+  if (typeof value !== 'number') return fallback
+  if (Number.isNaN(value)) return fallback
+  return Math.min(Math.max(value, min), max)
+}
+
+export const isTimeSignature = (value: unknown): value is TimeSignature => {
+  return (
+    value === '2/4' ||
+    value === '3/4' ||
+    value === '4/4' ||
+    value === 'Free'
+  )
+}
+
+export const isClickSound = (value: unknown): value is ClickSound => {
+  return (
+    value === 'Soft Tick' ||
+    value === 'Wood' ||
+    value === 'Metal' ||
+    value === 'Breath' ||
+    value === 'Muted Key'
+  )
+}
+
+export const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
+  return value === 'Quarter' ||
+    value === 'Eighth'
+}
+
+export const isVisualEffect = (value: unknown): value is VisualEffect => {
+  return value === 'Ripple' ||
+    value === 'Ghost Sweep' ||
+    value === 'None'
+}
+
+export const isPresetName = (value: unknown): value is PresetName => {
+  return (
+    value === 'Current' ||
+    value === 'Void / Score Float' ||
+    value === 'Void / Practice' ||
+    value === 'Void / Recording' ||
+    value === 'Void / Night' ||
+    value === 'My Saved Preset'
+  )
+}
+
+export const isBackgroundMode = (value: unknown): value is BackgroundMode => {
+  return (
+    value === 'Image' ||
+    value === 'Void Black' ||
+    value === 'Warm Gray' ||
+    value === 'Deep Blue' ||
+    value === 'Paper Dark'
+  )
+}
+
+export const normalizePresetValues = (
+  value: Partial<PresetValues> | null | undefined,
+  fallback: PresetValues,
+): PresetValues => {
+  return {
+    bpm: clampNumber(value?.bpm, 30, 240, fallback.bpm),
+
+    timeSignature: isTimeSignature(value?.timeSignature)
+      ? value.timeSignature
+      : fallback.timeSignature,
+
+    breathIntensity: clampNumber(
+      value?.breathIntensity,
+      0,
+      100,
+      fallback.breathIntensity,
+    ),
+
+    smallRippleIntensity: clampNumber(
+      value?.smallRippleIntensity,
+      0,
+      100,
+      fallback.smallRippleIntensity,
+    ),
+
+    largeRippleIntensity: clampNumber(
+      value?.largeRippleIntensity,
+      0,
+      100,
+      fallback.largeRippleIntensity,
+    ),
+
+    clickSound: isClickSound(value?.clickSound)
+      ? value.clickSound
+      : fallback.clickSound,
+
+    clickSubdivision: isClickSubdivision(value?.clickSubdivision)
+      ? value.clickSubdivision
+      : fallback.clickSubdivision,
+
+    visualEffect: isVisualEffect(value?.visualEffect)
+      ? value.visualEffect
+      : fallback.visualEffect,
+
+    volume: clampNumber(value?.volume, 0, 100, fallback.volume),
+
+    isScoreVisible:
+      typeof value?.isScoreVisible === 'boolean'
+        ? value.isScoreVisible
+        : fallback.isScoreVisible,
+
+    scoreOpacity: clampNumber(
+      value?.scoreOpacity,
+      0,
+      100,
+      fallback.scoreOpacity,
+    ),
+
+    scoreScale: clampNumber(value?.scoreScale, 20, 160, fallback.scoreScale),
+
+    scoreX: clampNumber(value?.scoreX, -400, 400, fallback.scoreX),
+
+    scoreY: clampNumber(value?.scoreY, -300, 300, fallback.scoreY),
+
+    scoreWhiteCut: clampNumber(
+      value?.scoreWhiteCut,
+      50,
+      95,
+      fallback.scoreWhiteCut,
+    ),
+
+    scoreInkBoost: clampNumber(
+      value?.scoreInkBoost,
+      0,
+      60,
+      fallback.scoreInkBoost,
+    ),
+
+    backgroundMode: isBackgroundMode(value?.backgroundMode)
+      ? value.backgroundMode
+      : fallback.backgroundMode,
+  }
+}
+
+export function loadSettings(): SavedSettings {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+
+    if (!raw) {
+      return defaultSettings
+    }
+
+    const parsed = JSON.parse(raw) as Partial<SavedSettings>
+
+    const normalizedPresetValues = normalizePresetValues(
+      parsed,
+      defaultPresetValues,
+    )
+
+    const savedPreset =
+      parsed.savedPreset && typeof parsed.savedPreset === 'object'
+        ? normalizePresetValues(parsed.savedPreset, defaultPresetValues)
+        : null
+
+    return {
+      ...normalizedPresetValues,
+
+      isDebugEnabled:
+        typeof parsed.isDebugEnabled === 'boolean'
+          ? parsed.isDebugEnabled
+          : defaultSettings.isDebugEnabled,
+
+      selectedPreset: isPresetName(parsed.selectedPreset)
+        ? parsed.selectedPreset
+        : defaultSettings.selectedPreset,
+
+      savedPreset,
+    }
+  } catch {
+    return defaultSettings
+  }
 }
 
