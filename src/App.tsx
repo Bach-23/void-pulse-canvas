@@ -21,338 +21,31 @@ import type {
   DebugMetrics,
   PdfSlot,
 } from './types'
+
+import {
+  saveSlotToDB,
+  loadSlotsFromDB,
+  updateSlotPageInDB,
+  clearPdfSlotsFromDB,
+} from './utils/db'
+
+import {
+  STORAGE_KEY,
+  clickSoundOptions,
+  clickSubdivisionOptions,
+  visualEffectOptions,
+  presetOptions,
+  backgroundModeOptions,
+} from './utils/constants'
+
+import {
+  createInitialPdfSlots,
+  loadSettings,
+} from './utils/settings'
+
 import './App.css'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
-
-const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
-const DEFAULT_SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
-const PDF_SLOT_COUNT = 10
-
-const DB_NAME = 'VoidPulseCanvasDB'
-const DB_VERSION = 1
-const STORE_NAME = 'pdfSlots'
-
-const openDB = (): Promise<IDBDatabase> => {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
-      const db = request.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'slotIndex' })
-      }
-    }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
-}
-
-const saveSlotToDB = async (
-  slotIndex: number,
-  pdfData: ArrayBuffer,
-  fileName: string,
-  pageNumber: number,
-  pageCount: number
-): Promise<void> => {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite')
-    const store = tx.objectStore(STORE_NAME)
-    store.put({ slotIndex, pdfData, fileName, pageNumber, pageCount })
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
-
-const loadSlotsFromDB = async (): Promise<any[]> => {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly')
-    const store = tx.objectStore(STORE_NAME)
-    const request = store.getAll()
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
-}
-
-const updateSlotPageInDB = async (slotIndex: number, pageNumber: number): Promise<void> => {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite')
-    const store = tx.objectStore(STORE_NAME)
-    const request = store.get(slotIndex)
-    request.onsuccess = () => {
-      const data = request.result
-      if (data) {
-        data.pageNumber = pageNumber
-        store.put(data)
-      }
-    }
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
-
-const clearPdfSlotsFromDB = async (): Promise<void> => {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite')
-    const store = tx.objectStore(STORE_NAME)
-    store.clear()
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
-
-const defaultPresetValues: PresetValues = {
-  bpm: 105,
-  timeSignature: '4/4',
-  breathIntensity: 40,
-  smallRippleIntensity: 100,
-  largeRippleIntensity: 40,
-  clickSound: 'Soft Tick',
-  clickSubdivision: 'Quarter',
-  visualEffect: 'Ripple',
-  volume: 70,
-  isScoreVisible: false,
-  scoreOpacity: 70,
-  scoreScale: 72,
-  scoreX: 0,
-  scoreY: 0,
-  scoreWhiteCut: 80,
-  scoreInkBoost: 30,
-  backgroundMode: 'Image',
-}
-
-const defaultSettings: SavedSettings = {
-  ...defaultPresetValues,
-  isDebugEnabled: false,
-  selectedPreset: 'Current',
-  savedPreset: null,
-}
-
-const clickSoundOptions: ClickSound[] = [
-  'Soft Tick',
-  'Wood',
-  'Metal',
-  'Breath',
-  'Muted Key',
-]
-
-const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth']
-const visualEffectOptions: VisualEffect[] = ['Ripple', 'Ghost Sweep', 'None']
-
-const presetOptions: PresetName[] = [
-  'Current',
-  'Void / Score Float',
-  'Void / Practice',
-  'Void / Recording',
-  'Void / Night',
-  'My Saved Preset',
-]
-
-const backgroundModeOptions: BackgroundMode[] = [
-  'Image',
-  'Void Black',
-  'Warm Gray',
-  'Deep Blue',
-  'Paper Dark',
-]
-
-const createEmptyPdfSlot = (): PdfSlot => ({
-  pdf: null,
-  fileName: '',
-  pageNumber: 1,
-  pageCount: 0,
-})
-
-const createInitialPdfSlots = (): PdfSlot[] =>
-  Array.from({ length: PDF_SLOT_COUNT }, () => createEmptyPdfSlot())
-
-const clampNumber = (
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number,
-) => {
-  if (typeof value !== 'number') return fallback
-  if (Number.isNaN(value)) return fallback
-  return Math.min(Math.max(value, min), max)
-}
-
-const isTimeSignature = (value: unknown): value is TimeSignature => {
-  return (
-    value === '2/4' ||
-    value === '3/4' ||
-    value === '4/4' ||
-    value === 'Free'
-  )
-}
-
-const isClickSound = (value: unknown): value is ClickSound => {
-  return (
-    value === 'Soft Tick' ||
-    value === 'Wood' ||
-    value === 'Metal' ||
-    value === 'Breath' ||
-    value === 'Muted Key'
-  )
-}
-
-const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
-  return value === 'Quarter' ||
-    value === 'Eighth'
-}
-
-const isVisualEffect = (value: unknown): value is VisualEffect => {
-  return value === 'Ripple' ||
-    value === 'Ghost Sweep' ||
-    value === 'None'
-}
-
-const isPresetName = (value: unknown): value is PresetName => {
-  return (
-    value === 'Current' ||
-    value === 'Void / Score Float' ||
-    value === 'Void / Practice' ||
-    value === 'Void / Recording' ||
-    value === 'Void / Night' ||
-    value === 'My Saved Preset'
-  )
-}
-
-const isBackgroundMode = (value: unknown): value is BackgroundMode => {
-  return (
-    value === 'Image' ||
-    value === 'Void Black' ||
-    value === 'Warm Gray' ||
-    value === 'Deep Blue' ||
-    value === 'Paper Dark'
-  )
-}
-
-const normalizePresetValues = (
-  value: Partial<PresetValues> | null | undefined,
-  fallback: PresetValues,
-): PresetValues => {
-  return {
-    bpm: clampNumber(value?.bpm, 30, 240, fallback.bpm),
-
-    timeSignature: isTimeSignature(value?.timeSignature)
-      ? value.timeSignature
-      : fallback.timeSignature,
-
-    breathIntensity: clampNumber(
-      value?.breathIntensity,
-      0,
-      100,
-      fallback.breathIntensity,
-    ),
-
-    smallRippleIntensity: clampNumber(
-      value?.smallRippleIntensity,
-      0,
-      100,
-      fallback.smallRippleIntensity,
-    ),
-
-    largeRippleIntensity: clampNumber(
-      value?.largeRippleIntensity,
-      0,
-      100,
-      fallback.largeRippleIntensity,
-    ),
-
-    clickSound: isClickSound(value?.clickSound)
-      ? value.clickSound
-      : fallback.clickSound,
-
-    clickSubdivision: isClickSubdivision(value?.clickSubdivision)
-      ? value.clickSubdivision
-      : fallback.clickSubdivision,
-
-    visualEffect: isVisualEffect(value?.visualEffect)
-      ? value.visualEffect
-      : fallback.visualEffect,
-
-    volume: clampNumber(value?.volume, 0, 100, fallback.volume),
-
-    isScoreVisible:
-      typeof value?.isScoreVisible === 'boolean'
-        ? value.isScoreVisible
-        : fallback.isScoreVisible,
-
-    scoreOpacity: clampNumber(
-      value?.scoreOpacity,
-      0,
-      100,
-      fallback.scoreOpacity,
-    ),
-
-    scoreScale: clampNumber(value?.scoreScale, 20, 160, fallback.scoreScale),
-
-    scoreX: clampNumber(value?.scoreX, -400, 400, fallback.scoreX),
-
-    scoreY: clampNumber(value?.scoreY, -300, 300, fallback.scoreY),
-
-    scoreWhiteCut: clampNumber(
-      value?.scoreWhiteCut,
-      50,
-      95,
-      fallback.scoreWhiteCut,
-    ),
-
-    scoreInkBoost: clampNumber(
-      value?.scoreInkBoost,
-      0,
-      60,
-      fallback.scoreInkBoost,
-    ),
-
-    backgroundMode: isBackgroundMode(value?.backgroundMode)
-      ? value.backgroundMode
-      : fallback.backgroundMode,
-  }
-}
-
-function loadSettings(): SavedSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-
-    if (!raw) {
-      return defaultSettings
-    }
-
-    const parsed = JSON.parse(raw) as Partial<SavedSettings>
-
-    const normalizedPresetValues = normalizePresetValues(
-      parsed,
-      defaultPresetValues,
-    )
-
-    const savedPreset =
-      parsed.savedPreset && typeof parsed.savedPreset === 'object'
-        ? normalizePresetValues(parsed.savedPreset, defaultPresetValues)
-        : null
-
-    return {
-      ...normalizedPresetValues,
-
-      isDebugEnabled:
-        typeof parsed.isDebugEnabled === 'boolean'
-          ? parsed.isDebugEnabled
-          : defaultSettings.isDebugEnabled,
-
-      selectedPreset: isPresetName(parsed.selectedPreset)
-        ? parsed.selectedPreset
-        : defaultSettings.selectedPreset,
-
-      savedPreset,
-    }
-  } catch {
-    return defaultSettings
-  }
-}
 
 function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs: number = 400) {
   const startPos = useRef<{ x: number; y: number; time: number } | null>(null)
@@ -418,7 +111,7 @@ function App() {
 
   const [isScoreImageLoaded, setIsScoreImageLoaded] = useState(false)
   const [scoreImageSource, setScoreImageSource] = useState(
-    DEFAULT_SCORE_IMAGE_SRC,
+    '/images/score-overlay-01.png',
   )
   const [scoreImageName, setScoreImageName] = useState('Default Score')
 
@@ -776,6 +469,10 @@ function App() {
   const sweepProgress = elapsedTime > 0 ? (elapsedTime % (beatDuration * beatsPerBar)) / (beatDuration * beatsPerBar) : 0
   const sweepLeft = timeSignature === 'Free' ? 7 : 7 + sweepProgress * 86
 
+  const getGhostLifeTime = (isBar: boolean) => {
+    return isBar ? 7.0 : 4.0;
+  }
+
   const ghosts = useMemo<{
     id: number
     left: number
@@ -794,34 +491,27 @@ function App() {
     const exactBeat = elapsedTime / beatDuration
     let i = beatIndex
 
-    // 寿命を「秒」ではなく「拍数」で固定
-    const GHOST_LIFE_BEATS_BAR = 12; // 小節頭は12拍分（約3小節）残す
-    const GHOST_LIFE_BEATS_NORMAL = 8; // 通常拍は8拍分（約2小節）残す
-
-    const maxSearchBeats = GHOST_LIFE_BEATS_BAR + 1
+    const maxSearchBeats = Math.ceil(7.0 / beatDuration) + 1
 
     while (i > beatIndex - maxSearchBeats && i >= 0) {
       const beatInBar = beatsPerBar === 1 ? 0 : i % beatsPerBar
       const isBar = timeSignature !== 'Free' && beatInBar === 0
       
-      const ageBeats = exactBeat - i
-      const lifeTimeBeats = isBar ? GHOST_LIFE_BEATS_BAR : GHOST_LIFE_BEATS_NORMAL
-      const progress = ageBeats / lifeTimeBeats
+      const ageSeconds = (exactBeat - i) * beatDuration
+      const lifeTime = getGhostLifeTime(isBar)
+      const progress = ageSeconds / lifeTime
 
       if (progress <= 1) {
         if (timeSignature === 'Free') {
-          // Free時は両端に等しくGhost（発光）を生成
           generated.push({ id: i, left: 7, isBar: false, progress })
           generated.push({ id: i + 1000000, left: 93, isBar: false, progress })
         } else {
-          // 通常時はSweepLeftに従いGhostを生成
           generated.push({
             id: i,
             left: 7 + (beatInBar / beatsPerBar) * 86,
             isBar,
             progress,
           })
-          // 小節頭は右端（93%）にも鏡像Ghostを生成し対称性を保つ
           if (isBar) {
             generated.push({ id: i + 1000000, left: 93, isBar, progress })
           }
@@ -830,7 +520,7 @@ function App() {
       i -= 1
     }
     return generated
-  }, [elapsedTime, beatIndex, visualEffect, isRunning, beatsPerBar, timeSignature])
+  }, [elapsedTime, beatIndex, visualEffect, isRunning, beatsPerBar, timeSignature, beatDuration])
 
   const turnAudioOn = async () => {
     await ensureAudioContext()
@@ -1378,13 +1068,11 @@ function App() {
 
       {isRunning && visualEffect === 'Ghost Sweep' && (
         <div className="sweep-container">
-          {/* 空間の支柱（常駐ベース）はFree時でも常に空間を定義するために残す */}
           <div className="structural-pillar-base" style={{ left: '7%' }} />
           <div className="structural-pillar-base" style={{ left: '93%' }} />
 
           {timeSignature !== 'Free' && (
             <>
-              {/* 支柱の脈動（小節頭レイヤー） */}
               <div
                 key={`pillar-pulse-left-${Math.floor(beatIndex / beatsPerBar)}`}
                 className="structural-pillar-pulse"
@@ -1396,7 +1084,6 @@ function App() {
                 style={{ left: '93%' }}
               />
 
-              {/* 時間を可視化する現在の移動ライン（Free時は停止・非表示） */}
               <div
                 key="sweep-line-main"
                 className="sweep-line"
