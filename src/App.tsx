@@ -745,15 +745,18 @@ function App() {
     if (file.type !== 'application/pdf') return
 
     try {
-      console.log(`[PDF Debug] 1. getDocument START for file: ${file.name} (${file.size} bytes)`);
+      console.log(`[PDF Debug] 1. getDocument START for file: ${file.name} (${file.size} bytes). Using wasmUrl: '/wasm/' to initialize OpenJPEG.`);
       const arrayBuffer = await file.arrayBuffer()
       const bufferForDb = arrayBuffer.slice(0)
 
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise.catch((e: any) => {
+      const pdf = await pdfjsLib.getDocument({
+        data: arrayBuffer,
+        wasmUrl: '/wasm/',
+      }).promise.catch((e: any) => {
         console.error(`[PDF Debug] 1. getDocument FAILED:`, e);
         throw e;
       })
-      console.log(`[PDF Debug] 1. getDocument SUCCESS. Total pages: ${pdf.numPages}`);
+      console.log(`[PDF Debug] 1. getDocument SUCCESS. Total pages: ${pdf.numPages}. OpenJPEG wasm loaded successfully.`);
 
       updatePdfSlot(activePdfSlotIndex, {
         pdf,
@@ -798,13 +801,16 @@ function App() {
 
     if (pdfDataCacheRef.current.has(slotIndex)) {
       try {
-        console.log(`[PDF Debug] 1. getDocument START from cache for slot ${slotIndex}`);
+        console.log(`[PDF Debug] 1. getDocument START from cache for slot ${slotIndex}. Using wasmUrl: '/wasm/' to initialize OpenJPEG.`);
         const buffer = pdfDataCacheRef.current.get(slotIndex)!
-        const pdf = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise.catch((e: any) => {
+        const pdf = await pdfjsLib.getDocument({
+          data: buffer.slice(0),
+          wasmUrl: '/wasm/',
+        }).promise.catch((e: any) => {
           console.error(`[PDF Debug] 1. getDocument FAILED from cache:`, e);
           throw e;
         })
-        console.log(`[PDF Debug] 1. getDocument SUCCESS from cache. Total pages: ${pdf.numPages}`);
+        console.log(`[PDF Debug] 1. getDocument SUCCESS from cache. Total pages: ${pdf.numPages}. OpenJPEG wasm loaded successfully.`);
         
         updatePdfSlot(slotIndex, { pdf })
         void renderPdfPage(slotIndex, slot.pageNumber, pdf, slot.fileName)
@@ -847,9 +853,12 @@ function App() {
 
           if (saved.slotIndex === 0) {
              try {
-              console.log(`[PDF Debug] 1. getDocument START from DB restore for slot 0`);
-              const pdf = await pdfjsLib.getDocument({ data: saved.pdfData.slice(0) }).promise
-              console.log(`[PDF Debug] 1. getDocument SUCCESS from DB restore.`);
+              console.log(`[PDF Debug] 1. getDocument START from DB restore for slot 0. Using wasmUrl: '/wasm/' to initialize OpenJPEG.`);
+              const pdf = await pdfjsLib.getDocument({
+                data: saved.pdfData.slice(0),
+                wasmUrl: '/wasm/',
+              }).promise
+              console.log(`[PDF Debug] 1. getDocument SUCCESS from DB restore. OpenJPEG wasm loaded successfully.`);
               
               newSlots[saved.slotIndex] = {
                 pdf,

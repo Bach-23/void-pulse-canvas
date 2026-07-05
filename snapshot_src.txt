@@ -1554,9 +1554,15 @@ function App() {
 
       if (!pdf) return
 
+      console.log(`[PDF Debug] 2. getPage START for page ${pageNumber}`);
       const totalPages = pdf.numPages
       const safePageNumber = Math.min(Math.max(pageNumber, 1), totalPages)
-      const page = await pdf.getPage(safePageNumber)
+      const page = await pdf.getPage(safePageNumber).catch((e: any) => {
+        console.error(`[PDF Debug] 2. getPage FAILED for page ${safePageNumber}:`, e);
+        throw e;
+      })
+      console.log(`[PDF Debug] 2. getPage SUCCESS for page ${safePageNumber}`);
+
       const viewport = page.getViewport({ scale: 2 })
 
       const temporaryCanvas = document.createElement('canvas')
@@ -1567,12 +1573,19 @@ function App() {
       temporaryCanvas.width = Math.floor(viewport.width)
       temporaryCanvas.height = Math.floor(viewport.height)
 
+      console.log(`[PDF Debug] 3. page.render START with viewport:`, { width: viewport.width, height: viewport.height });
       await page.render({
          canvasContext: temporaryContext,
         viewport,
-      }).promise
+      }).promise.catch((e: any) => {
+         console.error(`[PDF Debug] 3. page.render FAILED:`, e);
+         throw e;
+      })
+      console.log(`[PDF Debug] 4. page.render COMPLETED`);
 
       const dataUrl = temporaryCanvas.toDataURL('image/png')
+      console.log(`[PDF Debug] 5. dataURL Generated (length: ${dataUrl.length})`);
+      
       const fileName = fileNameOverride ?? slot?.fileName ?? 'PDF Score'
 
       updatePdfSlot(slotIndex, {
@@ -1601,10 +1614,15 @@ function App() {
     if (file.type !== 'application/pdf') return
 
     try {
+      console.log(`[PDF Debug] 1. getDocument START for file: ${file.name} (${file.size} bytes)`);
       const arrayBuffer = await file.arrayBuffer()
       const bufferForDb = arrayBuffer.slice(0)
 
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise.catch((e: any) => {
+        console.error(`[PDF Debug] 1. getDocument FAILED:`, e);
+        throw e;
+      })
+      console.log(`[PDF Debug] 1. getDocument SUCCESS. Total pages: ${pdf.numPages}`);
 
       updatePdfSlot(activePdfSlotIndex, {
         pdf,
@@ -1649,8 +1667,14 @@ function App() {
 
     if (pdfDataCacheRef.current.has(slotIndex)) {
       try {
+        console.log(`[PDF Debug] 1. getDocument START from cache for slot ${slotIndex}`);
         const buffer = pdfDataCacheRef.current.get(slotIndex)!
-        const pdf = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise
+        const pdf = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise.catch((e: any) => {
+          console.error(`[PDF Debug] 1. getDocument FAILED from cache:`, e);
+          throw e;
+        })
+        console.log(`[PDF Debug] 1. getDocument SUCCESS from cache. Total pages: ${pdf.numPages}`);
+        
         updatePdfSlot(slotIndex, { pdf })
         void renderPdfPage(slotIndex, slot.pageNumber, pdf, slot.fileName)
       } catch (error) {
@@ -1692,7 +1716,10 @@ function App() {
 
           if (saved.slotIndex === 0) {
              try {
+              console.log(`[PDF Debug] 1. getDocument START from DB restore for slot 0`);
               const pdf = await pdfjsLib.getDocument({ data: saved.pdfData.slice(0) }).promise
+              console.log(`[PDF Debug] 1. getDocument SUCCESS from DB restore.`);
+              
               newSlots[saved.slotIndex] = {
                 pdf,
                 fileName: saved.fileName,
@@ -1703,7 +1730,7 @@ function App() {
               activePageToRender = saved.pageNumber
               activeFileName = saved.fileName
             } catch (err) {
-               console.error(`Failed to parse PDF for slot 0`, err)
+               console.error(`[PDF Debug] 1. getDocument FAILED from DB restore:`, err)
               newSlots[saved.slotIndex] = {
                 pdf: null,
                 fileName: saved.fileName,
