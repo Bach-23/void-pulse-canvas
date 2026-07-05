@@ -1,6 +1,5 @@
 // src/utils/constants.ts
 import type {
-  TimeSignature,
   ClickSound,
   ClickSubdivision,
   VisualEffect,
