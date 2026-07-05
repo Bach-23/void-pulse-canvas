@@ -1020,7 +1020,7 @@ function App() {
   }, [beatIndex, isRunning])
 
   const tuneCanvasBrightness = Math.max(0.1, 1 - Math.abs(tuneData.distance))
-  const tuneY = tuneData.distance * 150
+  const tuneY = -tuneData.distance * 150
   const tuneTime = performance.now() / 1000
   const centerWobble = tuneData.isStable ? (Math.sin(tuneTime * 0.35) * 3 + Math.sin(tuneTime * 0.5) * 0.15) : 0
   const finalTuneY = tuneY + centerWobble
