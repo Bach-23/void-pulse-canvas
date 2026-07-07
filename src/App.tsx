@@ -15,8 +15,6 @@ import type {
   ClickSubdivision,
   VisualEffect,
   BackgroundMode,
-  PresetName,
-  PresetValues,
   SavedSettings,
   DebugMetrics,
   PdfSlot,
@@ -25,7 +23,7 @@ import type {
 import {
   saveSlotToDB,
   loadSlotsFromDB,
-  updateSlotPageInDB,
+  updateSlotMetadataInDB,
   clearPdfSlotsFromDB,
 } from './utils/db'
 
@@ -34,7 +32,6 @@ import {
   clickSoundOptions,
   clickSubdivisionOptions,
   visualEffectOptions,
-  presetOptions,
   backgroundModeOptions,
 } from './utils/constants'
 
@@ -148,14 +145,6 @@ function App() {
     volume,
     isDebugEnabled,
     isScoreVisible,
-    scoreOpacity,
-    scoreScale,
-    scoreX,
-    scoreY,
-    scoreWhiteCut,
-    scoreInkBoost,
-    selectedPreset,
-    savedPreset,
     backgroundMode,
   } = settings
 
@@ -163,6 +152,13 @@ function App() {
   const isPdfLoaded = Boolean(activePdfSlot?.pdf)
   const pdfPageNumber = activePdfSlot?.pageNumber ?? 1
   const pdfPageCount = activePdfSlot?.pageCount ?? 0
+
+  const activeScoreScale = activePdfSlot?.scoreScale ?? 72
+  const activeScoreX = activePdfSlot?.scoreX ?? 0
+  const activeScoreY = activePdfSlot?.scoreY ?? 0
+  const activeScoreOpacity = activePdfSlot?.scoreOpacity ?? 70
+  const activeScoreWhiteCut = activePdfSlot?.scoreWhiteCut ?? 80
+  const activeScoreInkBoost = activePdfSlot?.scoreInkBoost ?? 30
 
   const updateSettings = (nextSettings: Partial<SavedSettings>) => {
     setSettings((currentSettings) => ({
@@ -179,134 +175,11 @@ function App() {
     )
   }
 
-  const getCurrentPresetValues = (): PresetValues => {
-    return {
-      bpm,
-      timeSignature,
-      breathIntensity,
-      smallRippleIntensity,
-      largeRippleIntensity,
-      clickSound,
-      clickSubdivision,
-      visualEffect,
-      volume,
-      isScoreVisible,
-      scoreOpacity,
-      scoreScale,
-      scoreX,
-      scoreY,
-      scoreWhiteCut,
-      scoreInkBoost,
-      backgroundMode,
-    }
-  }
-
-  const saveCurrentPreset = () => {
-    updateSettings({
-      savedPreset: getCurrentPresetValues(),
-      selectedPreset: 'My Saved Preset',
+  const updateActiveSlotSettings = (updates: Partial<PdfSlot>) => {
+    updatePdfSlot(activePdfSlotIndex, updates)
+    updateSlotMetadataInDB(activePdfSlotIndex, updates).catch((err) => {
+      console.error('Failed to update slot metadata in DB:', err)
     })
-  }
-
-  const applyPreset = () => {
-    if (selectedPreset === 'Current') return
-
-    if (selectedPreset === 'My Saved Preset') {
-      if (!savedPreset) return
-      updateSettings({ ...savedPreset })
-      return
-    }
-
-    if (selectedPreset === 'Void / Score Float') {
-      updateSettings({
-        bpm: 105,
-        timeSignature: '4/4',
-        breathIntensity: 40,
-        smallRippleIntensity: 100,
-        largeRippleIntensity: 40,
-        clickSound: 'Muted Key',
-        clickSubdivision: 'Quarter',
-        visualEffect: 'Ripple',
-        volume: 70,
-        isScoreVisible: true,
-        scoreOpacity: 70,
-        scoreScale: 72,
-        scoreX: 0,
-        scoreY: 0,
-        scoreWhiteCut: 80,
-        scoreInkBoost: 30,
-        backgroundMode: 'Image',
-      })
-      return
-    }
-
-    if (selectedPreset === 'Void / Practice') {
-      updateSettings({
-        bpm: 105,
-        timeSignature: '4/4',
-        breathIntensity: 32,
-        smallRippleIntensity: 100,
-        largeRippleIntensity: 36,
-        clickSound: 'Soft Tick',
-        clickSubdivision: 'Quarter',
-        visualEffect: 'Ripple',
-        volume: 72,
-        isScoreVisible: true,
-        scoreOpacity: 82,
-        scoreScale: 78,
-        scoreX: 0,
-        scoreY: 0,
-        scoreWhiteCut: 78,
-        scoreInkBoost: 24,
-        backgroundMode: 'Warm Gray',
-      })
-      return
-    }
-
-    if (selectedPreset === 'Void / Recording') {
-      updateSettings({
-        bpm: 105,
-        timeSignature: '4/4',
-        breathIntensity: 28,
-        smallRippleIntensity: 72,
-        largeRippleIntensity: 32,
-        clickSound: 'Muted Key',
-        clickSubdivision: 'Quarter',
-        visualEffect: 'Ripple',
-        volume: 48,
-        isScoreVisible: true,
-        scoreOpacity: 58,
-        scoreScale: 70,
-        scoreX: 0,
-        scoreY: 0,
-        scoreWhiteCut: 82,
-        scoreInkBoost: 22,
-        backgroundMode: 'Void Black',
-      })
-      return
-    }
-
-    if (selectedPreset === 'Void / Night') {
-      updateSettings({
-        bpm: 105,
-        timeSignature: 'Free',
-        breathIntensity: 58,
-        smallRippleIntensity: 76,
-        largeRippleIntensity: 30,
-        clickSound: 'Breath',
-        clickSubdivision: 'Quarter',
-        visualEffect: 'Ripple',
-        volume: 54,
-        isScoreVisible: true,
-        scoreOpacity: 46,
-        scoreScale: 68,
-        scoreX: 0,
-        scoreY: 0,
-        scoreWhiteCut: 84,
-        scoreInkBoost: 18,
-        backgroundMode: 'Deep Blue',
-      })
-    }
   }
 
   const beatsPerBar = useMemo(() => {
@@ -334,12 +207,14 @@ function App() {
   }, [volume])
 
   const scoreOpacityRatio = useMemo(() => {
-    return Math.min(Math.max(scoreOpacity, 0), 100) / 100
-  }, [scoreOpacity])
+    return scoreRenderMode === 'plain' 
+      ? 1 
+      : Math.min(Math.max(activeScoreOpacity, 0), 100) / 100
+  }, [activeScoreOpacity, scoreRenderMode])
 
   const scoreScaleRatio = useMemo(() => {
-    return Math.min(Math.max(scoreScale, 20), 160) / 100
-  }, [scoreScale])
+    return Math.min(Math.max(activeScoreScale, 20), 160) / 100
+  }, [activeScoreScale])
 
   const backgroundInlineStyle = useMemo<CSSProperties>(() => {
     if (backgroundMode === 'Image') {
@@ -598,8 +473,8 @@ function App() {
     const imageData = context.getImageData(0, 0, width, height)
     const data = imageData.data
 
-    const paperCutRatio = Math.min(Math.max(scoreWhiteCut, 50), 95) / 100
-    const inkLiftRatio = Math.min(Math.max(scoreInkBoost, 0), 60) / 60
+    const paperCutRatio = Math.min(Math.max(activeScoreWhiteCut, 50), 95) / 100
+    const inkLiftRatio = Math.min(Math.max(activeScoreInkBoost, 0), 60) / 60
 
     const whiteThreshold = 255 - paperCutRatio * 185
     const fadeRange = Math.max(1, 255 - whiteThreshold)
@@ -726,7 +601,7 @@ function App() {
         pageCount: totalPages,
       })
 
-      updateSlotPageInDB(slotIndex, safePageNumber).catch((err) => {
+      updateSlotMetadataInDB(slotIndex, { pageNumber: safePageNumber }).catch((err) => {
         console.error('Failed to update PDF page in DB:', err)
       })
 
@@ -769,7 +644,14 @@ function App() {
 
       await renderPdfPage(activePdfSlotIndex, 1, pdf, file.name)
 
-      saveSlotToDB(activePdfSlotIndex, bufferForDb, file.name, 1, pdf.numPages).catch((err) => {
+      saveSlotToDB(
+        activePdfSlotIndex, 
+        bufferForDb, 
+        file.name, 
+        1, 
+        pdf.numPages,
+        pdfSlots[activePdfSlotIndex]
+      ).catch((err) => {
         console.error('Failed to save PDF to DB:', err)
       })
     } catch (error) {
@@ -864,7 +746,13 @@ function App() {
                 pdf,
                 fileName: saved.fileName,
                 pageNumber: saved.pageNumber,
-               pageCount: saved.pageCount,
+                pageCount: saved.pageCount,
+                scoreScale: saved.scoreScale ?? 72,
+                scoreX: saved.scoreX ?? 0,
+                scoreY: saved.scoreY ?? 0,
+                scoreOpacity: saved.scoreOpacity ?? 70,
+                scoreWhiteCut: saved.scoreWhiteCut ?? 80,
+                scoreInkBoost: saved.scoreInkBoost ?? 30,
               }
               activePdfToRender = pdf
               activePageToRender = saved.pageNumber
@@ -876,6 +764,12 @@ function App() {
                 fileName: saved.fileName,
                 pageNumber: saved.pageNumber,
                 pageCount: saved.pageCount,
+                scoreScale: saved.scoreScale ?? 72,
+                scoreX: saved.scoreX ?? 0,
+                scoreY: saved.scoreY ?? 0,
+                scoreOpacity: saved.scoreOpacity ?? 70,
+                scoreWhiteCut: saved.scoreWhiteCut ?? 80,
+                scoreInkBoost: saved.scoreInkBoost ?? 30,
               }
             }
           } else {
@@ -883,7 +777,13 @@ function App() {
               pdf: null,
               fileName: saved.fileName,
               pageNumber: saved.pageNumber,
-               pageCount: saved.pageCount,
+              pageCount: saved.pageCount,
+              scoreScale: saved.scoreScale ?? 72,
+              scoreX: saved.scoreX ?? 0,
+              scoreY: saved.scoreY ?? 0,
+              scoreOpacity: saved.scoreOpacity ?? 70,
+              scoreWhiteCut: saved.scoreWhiteCut ?? 80,
+              scoreInkBoost: saved.scoreInkBoost ?? 30,
             }
           }
         }
@@ -950,8 +850,8 @@ function App() {
   }, [
     isScoreVisible,
     isScoreImageLoaded,
-    scoreWhiteCut,
-    scoreInkBoost,
+    activeScoreWhiteCut,
+    activeScoreInkBoost,
     scoreImageSource,
     scoreRenderMode,
   ])
@@ -1038,8 +938,8 @@ function App() {
           '--large-ripple-intensity': largeRippleIntensity / 100,
           '--score-opacity': scoreOpacityRatio,
           '--score-scale': scoreScaleRatio,
-          '--score-x': `${scoreX}px`,
-          '--score-y': `${scoreY}px`,
+          '--score-x': `${activeScoreX}px`,
+          '--score-y': `${activeScoreY}px`,
           '--tune-y': `${finalTuneY}px`,
           '--tune-brightness': tuneCanvasBrightness
         } as CSSProperties
@@ -1313,24 +1213,6 @@ function App() {
             </label>
 
             <label className="compact-control sound-control">
-              <span>Preset</span>
-              <select
-                value={selectedPreset}
-                onChange={(event) =>
-                  updateSettings({
-                    selectedPreset: event.target.value as PresetName,
-                  })
-                }
-              >
-                {presetOptions.map((preset) => (
-                  <option key={preset} value={preset}>
-                    {preset}
-                  </option>
-                ))}
-              </select>
-             </label>
-
-            <label className="compact-control sound-control">
               <span>Background</span>
               <select
                 value={backgroundMode}
@@ -1392,16 +1274,6 @@ function App() {
                 ))}
               </select>
             </label>
-
-            <div className="score-switch-group">
-              <button className="score-switch" onClick={applyPreset}>
-                Apply
-              </button>
-
-              <button className="score-switch" onClick={saveCurrentPreset}>
-                 Save Current
-              </button>
-            </div>
 
             <div className="score-switch-group">
               <button
@@ -1562,14 +1434,10 @@ function App() {
                 type="range"
                 min="0"
                 max="100"
-                value={scoreOpacity}
-                onChange={(event) =>
-                  updateSettings({
-                    scoreOpacity: Number(event.target.value),
-                  })
-                }
+                value={activeScoreOpacity}
+                onChange={(event) => updateActiveSlotSettings({ scoreOpacity: Number(event.target.value) })}
               />
-              <em>{scoreOpacity}</em>
+              <em>{activeScoreOpacity}</em>
             </label>
 
             <label className="slider-control">
@@ -1578,14 +1446,10 @@ function App() {
                 type="range"
                 min="20"
                 max="160"
-                value={scoreScale}
-                onChange={(event) =>
-                   updateSettings({
-                    scoreScale: Number(event.target.value),
-                  })
-                }
+                value={activeScoreScale}
+                onChange={(event) => updateActiveSlotSettings({ scoreScale: Number(event.target.value) })}
               />
-              <em>{scoreScale}</em>
+              <em>{activeScoreScale}</em>
             </label>
 
             <label className="slider-control">
@@ -1594,14 +1458,10 @@ function App() {
                 type="range"
                 min="-400"
                 max="400"
-                value={scoreX}
-                onChange={(event) =>
-                  updateSettings({
-                    scoreX: Number(event.target.value),
-                  })
-                }
+                value={activeScoreX}
+                onChange={(event) => updateActiveSlotSettings({ scoreX: Number(event.target.value) })}
               />
-              <em>{scoreX}</em>
+              <em>{activeScoreX}</em>
             </label>
 
             <label className="slider-control">
@@ -1610,14 +1470,10 @@ function App() {
                 type="range"
                 min="-300"
                 max="300"
-                value={scoreY}
-                onChange={(event) =>
-                  updateSettings({
-                     scoreY: Number(event.target.value),
-                  })
-                }
+                value={activeScoreY}
+                onChange={(event) => updateActiveSlotSettings({ scoreY: Number(event.target.value) })}
               />
-              <em>{scoreY}</em>
+              <em>{activeScoreY}</em>
             </label>
 
             <label className="slider-control">
@@ -1626,14 +1482,10 @@ function App() {
                 type="range"
                 min="50"
                 max="95"
-                value={scoreWhiteCut}
-                onChange={(event) =>
-                  updateSettings({
-                    scoreWhiteCut: Number(event.target.value),
-                  })
-                }
+                value={activeScoreWhiteCut}
+                onChange={(event) => updateActiveSlotSettings({ scoreWhiteCut: Number(event.target.value) })}
               />
-              <em>{scoreWhiteCut}</em>
+              <em>{activeScoreWhiteCut}</em>
             </label>
 
             <label className="slider-control">
@@ -1642,14 +1494,10 @@ function App() {
                 type="range"
                 min="0"
                 max="60"
-                value={scoreInkBoost}
-                onChange={(event) =>
-                  updateSettings({
-                    scoreInkBoost: Number(event.target.value),
-                  })
-                 }
+                value={activeScoreInkBoost}
+                onChange={(event) => updateActiveSlotSettings({ scoreInkBoost: Number(event.target.value) })}
               />
-              <em>{scoreInkBoost}</em>
+              <em>{activeScoreInkBoost}</em>
             </label>
           </div>
         </div>
@@ -1670,7 +1518,6 @@ function App() {
         <span>
           {isPdfLoaded ? `PDF ${pdfPageNumber}/${pdfPageCount}` : 'PDF --'}
         </span>
-        <span>{selectedPreset}</span>
         <span>
           {timeSignature === 'Free'
             ? 'No Meter'

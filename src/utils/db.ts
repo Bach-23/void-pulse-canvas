@@ -1,6 +1,8 @@
 // src/utils/db.ts
+import type { PdfSlot } from '../types'
+
 const DB_NAME = 'VoidPulseCanvasDB'
-const DB_VERSION = 1
+const DB_VERSION = 2 // 演奏空間メタデータ拡張によりバージョンを引き上げ
 const STORE_NAME = 'pdfSlots'
 
 export const openDB = (): Promise<IDBDatabase> => {
@@ -22,13 +24,26 @@ export const saveSlotToDB = async (
   pdfData: ArrayBuffer,
   fileName: string,
   pageNumber: number,
-  pageCount: number
+  pageCount: number,
+  slotData: Partial<PdfSlot>
 ): Promise<void> => {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
-    store.put({ slotIndex, pdfData, fileName, pageNumber, pageCount })
+    store.put({ 
+      slotIndex, 
+      pdfData, 
+      fileName, 
+      pageNumber, 
+      pageCount,
+      scoreScale: slotData.scoreScale ?? 72,
+      scoreX: slotData.scoreX ?? 0,
+      scoreY: slotData.scoreY ?? 0,
+      scoreOpacity: slotData.scoreOpacity ?? 70,
+      scoreWhiteCut: slotData.scoreWhiteCut ?? 80,
+      scoreInkBoost: slotData.scoreInkBoost ?? 30
+    })
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
@@ -45,16 +60,17 @@ export const loadSlotsFromDB = async (): Promise<any[]> => {
   })
 }
 
-export const updateSlotPageInDB = async (slotIndex: number, pageNumber: number): Promise<void> => {
+export const updateSlotMetadataInDB = async (slotIndex: number, metadata: Partial<PdfSlot>): Promise<void> => {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
     const request = store.get(slotIndex)
+   
     request.onsuccess = () => {
       const data = request.result
       if (data) {
-        data.pageNumber = pageNumber
+        Object.assign(data, metadata)
         store.put(data)
       }
     }

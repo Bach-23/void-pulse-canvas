@@ -8,11 +8,9 @@ export type VisualEffect = 'Ripple' | 'Ghost Sweep' | 'None'
 
 export type BackgroundMode = 'Image' | 'Void Black' | 'Warm Gray' | 'Deep Blue' | 'Paper Dark'
 
-export type PresetName = 'Current' | 'Void / Score Float' | 'Void / Practice' | 'Void / Recording' | 'Void / Night' | 'My Saved Preset'
-
 export type BeatIntensity = 'High' | 'Mid' | 'Low'
 
-export type PresetValues = {
+export type SavedSettings = {
   bpm: number
   timeSignature: TimeSignature
   breathIntensity: number
@@ -23,19 +21,8 @@ export type PresetValues = {
   visualEffect: VisualEffect
   volume: number
   isScoreVisible: boolean
-  scoreOpacity: number
-  scoreScale: number
-  scoreX: number
-  scoreY: number
-  scoreWhiteCut: number
-  scoreInkBoost: number
   backgroundMode: BackgroundMode
-}
-
-export type SavedSettings = PresetValues & {
   isDebugEnabled: boolean
-  selectedPreset: PresetName
-  savedPreset: PresetValues | null
 }
 
 export type DebugMetrics = {
@@ -48,9 +35,14 @@ export type DebugMetrics = {
 
 export type PdfSlot = {
   // pdfjs-distの型解決エラーによる連鎖パース崩壊を防ぐため、anyで防壁を構築。
-  // 描画エンジン内部で処理されるオブジェクトをここで厳密に縛る必要はございません。
   pdf: any
   fileName: string
   pageNumber: number
   pageCount: number
+  scoreScale: number
+  scoreX: number
+  scoreY: number
+  scoreOpacity: number
+  scoreWhiteCut: number
+  scoreInkBoost: number
 }

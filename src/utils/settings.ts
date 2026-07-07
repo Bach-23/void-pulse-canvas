@@ -5,8 +5,6 @@ import type {
   ClickSubdivision,
   VisualEffect,
   BackgroundMode,
-  PresetName,
-  PresetValues,
   SavedSettings,
   PdfSlot,
 } from '../types'
@@ -14,7 +12,6 @@ import type {
 import {
   STORAGE_KEY,
   PDF_SLOT_COUNT,
-  defaultPresetValues,
   defaultSettings,
 } from './constants'
 
@@ -23,6 +20,12 @@ export const createEmptyPdfSlot = (): PdfSlot => ({
   fileName: '',
   pageNumber: 1,
   pageCount: 0,
+  scoreScale: 72,
+  scoreX: 0,
+  scoreY: 0,
+  scoreOpacity: 70,
+  scoreWhiteCut: 80,
+  scoreInkBoost: 30,
 })
 
 export const createInitialPdfSlots = (): PdfSlot[] =>
@@ -59,25 +62,11 @@ export const isClickSound = (value: unknown): value is ClickSound => {
 }
 
 export const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
-  return value === 'Quarter' ||
-    value === 'Eighth'
+  return value === 'Quarter' || value === 'Eighth'
 }
 
 export const isVisualEffect = (value: unknown): value is VisualEffect => {
-  return value === 'Ripple' ||
-    value === 'Ghost Sweep' ||
-    value === 'None'
-}
-
-export const isPresetName = (value: unknown): value is PresetName => {
-  return (
-    value === 'Current' ||
-    value === 'Void / Score Float' ||
-    value === 'Void / Practice' ||
-    value === 'Void / Recording' ||
-    value === 'Void / Night' ||
-    value === 'My Saved Preset'
-  )
+  return value === 'Ripple' || value === 'Ghost Sweep' || value === 'None'
 }
 
 export const isBackgroundMode = (value: unknown): value is BackgroundMode => {
@@ -90,123 +79,28 @@ export const isBackgroundMode = (value: unknown): value is BackgroundMode => {
   )
 }
 
-export const normalizePresetValues = (
-  value: Partial<PresetValues> | null | undefined,
-  fallback: PresetValues,
-): PresetValues => {
-  return {
-    bpm: clampNumber(value?.bpm, 30, 240, fallback.bpm),
-
-    timeSignature: isTimeSignature(value?.timeSignature)
-      ? value.timeSignature
-      : fallback.timeSignature,
-
-    breathIntensity: clampNumber(
-      value?.breathIntensity,
-      0,
-      100,
-      fallback.breathIntensity,
-    ),
-
-    smallRippleIntensity: clampNumber(
-      value?.smallRippleIntensity,
-      0,
-      100,
-      fallback.smallRippleIntensity,
-    ),
-
-    largeRippleIntensity: clampNumber(
-      value?.largeRippleIntensity,
-      0,
-      100,
-      fallback.largeRippleIntensity,
-    ),
-
-    clickSound: isClickSound(value?.clickSound)
-      ? value.clickSound
-      : fallback.clickSound,
-
-    clickSubdivision: isClickSubdivision(value?.clickSubdivision)
-      ? value.clickSubdivision
-      : fallback.clickSubdivision,
-
-    visualEffect: isVisualEffect(value?.visualEffect)
-      ? value.visualEffect
-      : fallback.visualEffect,
-
-    volume: clampNumber(value?.volume, 0, 100, fallback.volume),
-
-    isScoreVisible:
-      typeof value?.isScoreVisible === 'boolean'
-        ? value.isScoreVisible
-        : fallback.isScoreVisible,
-
-    scoreOpacity: clampNumber(
-      value?.scoreOpacity,
-      0,
-      100,
-      fallback.scoreOpacity,
-    ),
-
-    scoreScale: clampNumber(value?.scoreScale, 20, 160, fallback.scoreScale),
-
-    scoreX: clampNumber(value?.scoreX, -400, 400, fallback.scoreX),
-
-    scoreY: clampNumber(value?.scoreY, -300, 300, fallback.scoreY),
-
-    scoreWhiteCut: clampNumber(
-      value?.scoreWhiteCut,
-      50,
-      95,
-      fallback.scoreWhiteCut,
-    ),
-
-    scoreInkBoost: clampNumber(
-      value?.scoreInkBoost,
-      0,
-      60,
-      fallback.scoreInkBoost,
-    ),
-
-    backgroundMode: isBackgroundMode(value?.backgroundMode)
-      ? value.backgroundMode
-      : fallback.backgroundMode,
-  }
-}
-
 export function loadSettings(): SavedSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-
     if (!raw) {
       return defaultSettings
     }
 
     const parsed = JSON.parse(raw) as Partial<SavedSettings>
 
-    const normalizedPresetValues = normalizePresetValues(
-      parsed,
-      defaultPresetValues,
-    )
-
-    const savedPreset =
-      parsed.savedPreset && typeof parsed.savedPreset === 'object'
-        ? normalizePresetValues(parsed.savedPreset, defaultPresetValues)
-        : null
-
     return {
-      ...normalizedPresetValues,
-
-      isDebugEnabled:
-        typeof parsed.isDebugEnabled === 'boolean'
-          ? parsed.isDebugEnabled
-          : defaultSettings.isDebugEnabled,
-
-      selectedPreset: isPresetName(parsed.selectedPreset)
-        ? parsed.selectedPreset
-        : defaultSettings.selectedPreset,
-
-      savedPreset,
+      bpm: clampNumber(parsed.bpm, 30, 240, defaultSettings.bpm),
+      timeSignature: isTimeSignature(parsed.timeSignature) ? parsed.timeSignature : defaultSettings.timeSignature,
+      breathIntensity: clampNumber(parsed.breathIntensity, 0, 100, defaultSettings.breathIntensity),
+      smallRippleIntensity: clampNumber(parsed.smallRippleIntensity, 0, 100, defaultSettings.smallRippleIntensity),
+      largeRippleIntensity: clampNumber(parsed.largeRippleIntensity, 0, 100, defaultSettings.largeRippleIntensity),
+      clickSound: isClickSound(parsed.clickSound) ? parsed.clickSound : defaultSettings.clickSound,
+      clickSubdivision: isClickSubdivision(parsed.clickSubdivision) ? parsed.clickSubdivision : defaultSettings.clickSubdivision,
+      visualEffect: isVisualEffect(parsed.visualEffect) ? parsed.visualEffect : defaultSettings.visualEffect,
+      volume: clampNumber(parsed.volume, 0, 100, defaultSettings.volume),
+      isScoreVisible: typeof parsed.isScoreVisible === 'boolean' ? parsed.isScoreVisible : defaultSettings.isScoreVisible,
+      backgroundMode: isBackgroundMode(parsed.backgroundMode) ? parsed.backgroundMode : defaultSettings.backgroundMode,
+      isDebugEnabled: typeof parsed.isDebugEnabled === 'boolean' ? parsed.isDebugEnabled : defaultSettings.isDebugEnabled,
     }
   } catch {
     return defaultSettings
