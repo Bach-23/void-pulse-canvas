@@ -604,6 +604,11 @@ h1 {
 .tune-ui-controls.is-visible,
 .standard-ui-controls.is-visible {
   opacity: 1;
+}
+
+/* 💡 Reader Paradigm 移行: UI全体が表示されている時のみクリックを許可する絶対防壁 */
+.app.ui-visible .tune-ui-controls.is-visible,
+.app.ui-visible .standard-ui-controls.is-visible {
   pointer-events: auto;
 }
 

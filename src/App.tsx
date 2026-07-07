@@ -44,7 +44,13 @@ import './App.css'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
-function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs: number = 400) {
+// 💡 Reader Paradigm 移行: onTap の追加とタップ判定の実装
+function useSwipe(
+  onSwipeLeft: () => void, 
+  onSwipeRight: () => void, 
+  onTap: () => void, 
+  cooldownMs: number = 400
+) {
   const startPos = useRef<{ x: number; y: number; time: number } | null>(null)
   const isCooldown = useRef(false)
 
@@ -82,8 +88,11 @@ function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs:
       setTimeout(() => {
         isCooldown.current = false
       }, cooldownMs)
+    } else if (absDx < 20 && absDy < 20 && dt < 500) {
+      // 💡 遊び幅 20px: 実機でのブレを許容しつつ、ドラッグと明確に区別する
+      onTap()
     }
-  }, [onSwipeLeft, onSwipeRight, cooldownMs])
+  }, [onSwipeLeft, onSwipeRight, onTap, cooldownMs])
 
   return { onPointerDown, onPointerUp }
 }
@@ -702,6 +711,43 @@ function App() {
     }
   }
 
+  // 💡 Reader Paradigm 移行: Timer処理の分離
+  const hideTimerIdRef = useRef<number | undefined>(undefined)
+
+  const showUi = useCallback(() => {
+    setIsUiVisible(true)
+
+    if (hideTimerIdRef.current) {
+      window.clearTimeout(hideTimerIdRef.current)
+    }
+
+    if (scoreRenderMode === 'tune' && isTonePlaying) {
+      return
+    }
+
+    const timeoutMs = scoreRenderMode === 'tune' ? 2000 : 3000
+
+    hideTimerIdRef.current = window.setTimeout(() => {
+      setIsUiVisible(false)
+    }, timeoutMs)
+  }, [scoreRenderMode, isTonePlaying])
+
+  const hideUi = useCallback(() => {
+    setIsUiVisible(false)
+    if (hideTimerIdRef.current) {
+      window.clearTimeout(hideTimerIdRef.current)
+      hideTimerIdRef.current = undefined
+    }
+  }, [])
+
+  const toggleUi = useCallback(() => {
+    if (isUiVisible) {
+      hideUi()
+    } else {
+      showUi()
+    }
+  }, [isUiVisible, hideUi, showUi])
+
   const swipeHandlers = useSwipe(
     () => {
       if (isPdfLoaded && pdfPageNumber < pdfPageCount && !isRenderingPdfRef.current) {
@@ -712,6 +758,10 @@ function App() {
       if (isPdfLoaded && pdfPageNumber > 1 && !isRenderingPdfRef.current) {
         showPreviousPdfPage()
       }
+    },
+    () => {
+      // 💡 Reader Paradigm: タップ（クリック）でUIをトグルする
+      toggleUi()
     },
     400
   )
@@ -856,43 +906,28 @@ function App() {
     scoreRenderMode,
   ])
 
+  // 💡 Reader Paradigm 移行: 初期化とモード変更時の表示保証
   useEffect(() => {
-    let hideTimerId: number | undefined
-
-    const showUi = () => {
-      setIsUiVisible(true)
-
-      if (hideTimerId) {
-        window.clearTimeout(hideTimerId)
-      }
-
-      if (scoreRenderMode === 'tune' && isTonePlaying) {
-        return
-      }
-
-      const timeoutMs = scoreRenderMode === 'tune' ? 2000 : 3000
-
-      hideTimerId = window.setTimeout(() => {
-        setIsUiVisible(false)
-      }, timeoutMs)
-    }
-
-    window.addEventListener('mousemove', showUi)
-    window.addEventListener('keydown', showUi)
-    window.addEventListener('pointerdown', showUi)
-
     showUi()
+    return () => {
+      if (hideTimerIdRef.current) window.clearTimeout(hideTimerIdRef.current)
+    }
+  }, [showUi])
+
+  // 💡 Reader Paradigm 移行: UI表示中のみ防衛線（タイマー延長）を張る
+  useEffect(() => {
+    if (!isUiVisible) return
+
+    const resetTimer = () => showUi()
+
+    window.addEventListener('mousemove', resetTimer)
+    window.addEventListener('keydown', resetTimer)
 
     return () => {
-      window.removeEventListener('mousemove', showUi)
-      window.removeEventListener('keydown', showUi)
-      window.removeEventListener('pointerdown', showUi)
-
-      if (hideTimerId) {
-        window.clearTimeout(hideTimerId)
-      }
+      window.removeEventListener('mousemove', resetTimer)
+      window.removeEventListener('keydown', resetTimer)
     }
-  }, [scoreRenderMode, isTonePlaying])
+  }, [isUiVisible, showUi])
 
   useEffect(() => {
     const handleFullscreenChange = () => {
