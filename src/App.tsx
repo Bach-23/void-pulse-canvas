@@ -57,7 +57,8 @@ function useSwipe(
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
     if (!event.isPrimary) return
     const target = event.target as HTMLElement
-    if (target.closest('button, input, select, textarea, .ui-panel, .slider-control, .compact-control')) return
+    // 💡 純粋な入力要素のみを除外対象とし、空白エリアのタップを許容するよう修正
+    if (target.closest('button, input, select, textarea')) return
     startPos.current = { x: event.clientX, y: event.clientY, time: Date.now() }
   }, [])
 

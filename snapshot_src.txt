@@ -605,6 +605,11 @@ h1 {
 .tune-ui-controls.is-visible,
 .standard-ui-controls.is-visible {
   opacity: 1;
+}
+
+/* 💡 Reader Paradigm 移行: UI全体が表示されている時のみクリックを許可する絶対防壁 */
+.app.ui-visible .tune-ui-controls.is-visible,
+.app.ui-visible .standard-ui-controls.is-visible {
   pointer-events: auto;
 }
 
@@ -884,8 +889,6 @@ import type {
   ClickSubdivision,
   VisualEffect,
   BackgroundMode,
-  PresetName,
-  PresetValues,
   SavedSettings,
   DebugMetrics,
   PdfSlot,
@@ -894,7 +897,7 @@ import type {
 import {
   saveSlotToDB,
   loadSlotsFromDB,
-  updateSlotPageInDB,
+  updateSlotMetadataInDB,
   clearPdfSlotsFromDB,
 } from './utils/db'
 
@@ -903,7 +906,6 @@ import {
   clickSoundOptions,
   clickSubdivisionOptions,
   visualEffectOptions,
-  presetOptions,
   backgroundModeOptions,
 } from './utils/constants'
 
@@ -916,7 +918,13 @@ import './App.css'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
-function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs: number = 400) {
+// 💡 Reader Paradigm 移行: onTap の追加とタップ判定の実装
+function useSwipe(
+  onSwipeLeft: () => void, 
+  onSwipeRight: () => void, 
+  onTap: () => void, 
+  cooldownMs: number = 400
+) {
   const startPos = useRef<{ x: number; y: number; time: number } | null>(null)
   const isCooldown = useRef(false)
 
@@ -954,8 +962,11 @@ function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, cooldownMs:
       setTimeout(() => {
         isCooldown.current = false
       }, cooldownMs)
+    } else if (absDx < 20 && absDy < 20 && dt < 500) {
+      // 💡 遊び幅 20px: 実機でのブレを許容しつつ、ドラッグと明確に区別する
+      onTap()
     }
-  }, [onSwipeLeft, onSwipeRight, cooldownMs])
+  }, [onSwipeLeft, onSwipeRight, onTap, cooldownMs])
 
   return { onPointerDown, onPointerUp }
 }
@@ -1017,14 +1028,6 @@ function App() {
     volume,
     isDebugEnabled,
     isScoreVisible,
-    scoreOpacity,
-    scoreScale,
-    scoreX,
-    scoreY,
-    scoreWhiteCut,
-    scoreInkBoost,
-    selectedPreset,
-    savedPreset,
     backgroundMode,
   } = settings
 
@@ -1032,6 +1035,13 @@ function App() {
   const isPdfLoaded = Boolean(activePdfSlot?.pdf)
   const pdfPageNumber = activePdfSlot?.pageNumber ?? 1
   const pdfPageCount = activePdfSlot?.pageCount ?? 0
+
+  const activeScoreScale = activePdfSlot?.scoreScale ?? 72
+  const activeScoreX = activePdfSlot?.scoreX ?? 0
+  const activeScoreY = activePdfSlot?.scoreY ?? 0
+  const activeScoreOpacity = activePdfSlot?.scoreOpacity ?? 70
+  const activeScoreWhiteCut = activePdfSlot?.scoreWhiteCut ?? 80
+  const activeScoreInkBoost = activePdfSlot?.scoreInkBoost ?? 30
 
   const updateSettings = (nextSettings: Partial<SavedSettings>) => {
     setSettings((currentSettings) => ({
@@ -1048,134 +1058,11 @@ function App() {
     )
   }
 
-  const getCurrentPresetValues = (): PresetValues => {
-    return {
-      bpm,
-      timeSignature,
-      breathIntensity,
-      smallRippleIntensity,
-      largeRippleIntensity,
-      clickSound,
-      clickSubdivision,
-      visualEffect,
-      volume,
-      isScoreVisible,
-      scoreOpacity,
-      scoreScale,
-      scoreX,
-      scoreY,
-      scoreWhiteCut,
-      scoreInkBoost,
-      backgroundMode,
-    }
-  }
-
-  const saveCurrentPreset = () => {
-    updateSettings({
-      savedPreset: getCurrentPresetValues(),
-      selectedPreset: 'My Saved Preset',
+  const updateActiveSlotSettings = (updates: Partial<PdfSlot>) => {
+    updatePdfSlot(activePdfSlotIndex, updates)
+    updateSlotMetadataInDB(activePdfSlotIndex, updates).catch((err) => {
+      console.error('Failed to update slot metadata in DB:', err)
     })
-  }
-
-  const applyPreset = () => {
-    if (selectedPreset === 'Current') return
-
-    if (selectedPreset === 'My Saved Preset') {
-      if (!savedPreset) return
-      updateSettings({ ...savedPreset })
-      return
-    }
-
-    if (selectedPreset === 'Void / Score Float') {
-      updateSettings({
-        bpm: 105,
-        timeSignature: '4/4',
-        breathIntensity: 40,
-        smallRippleIntensity: 100,
-        largeRippleIntensity: 40,
-        clickSound: 'Muted Key',
-        clickSubdivision: 'Quarter',
-        visualEffect: 'Ripple',
-        volume: 70,
-        isScoreVisible: true,
-        scoreOpacity: 70,
-        scoreScale: 72,
-        scoreX: 0,
-        scoreY: 0,
-        scoreWhiteCut: 80,
-        scoreInkBoost: 30,
-        backgroundMode: 'Image',
-      })
-      return
-    }
-
-    if (selectedPreset === 'Void / Practice') {
-      updateSettings({
-        bpm: 105,
-        timeSignature: '4/4',
-        breathIntensity: 32,
-        smallRippleIntensity: 100,
-        largeRippleIntensity: 36,
-        clickSound: 'Soft Tick',
-        clickSubdivision: 'Quarter',
-        visualEffect: 'Ripple',
-        volume: 72,
-        isScoreVisible: true,
-        scoreOpacity: 82,
-        scoreScale: 78,
-        scoreX: 0,
-        scoreY: 0,
-        scoreWhiteCut: 78,
-        scoreInkBoost: 24,
-        backgroundMode: 'Warm Gray',
-      })
-      return
-    }
-
-    if (selectedPreset === 'Void / Recording') {
-      updateSettings({
-        bpm: 105,
-        timeSignature: '4/4',
-        breathIntensity: 28,
-        smallRippleIntensity: 72,
-        largeRippleIntensity: 32,
-        clickSound: 'Muted Key',
-        clickSubdivision: 'Quarter',
-        visualEffect: 'Ripple',
-        volume: 48,
-        isScoreVisible: true,
-        scoreOpacity: 58,
-        scoreScale: 70,
-        scoreX: 0,
-        scoreY: 0,
-        scoreWhiteCut: 82,
-        scoreInkBoost: 22,
-        backgroundMode: 'Void Black',
-      })
-      return
-    }
-
-    if (selectedPreset === 'Void / Night') {
-      updateSettings({
-        bpm: 105,
-        timeSignature: 'Free',
-        breathIntensity: 58,
-        smallRippleIntensity: 76,
-        largeRippleIntensity: 30,
-        clickSound: 'Breath',
-        clickSubdivision: 'Quarter',
-        visualEffect: 'Ripple',
-        volume: 54,
-        isScoreVisible: true,
-        scoreOpacity: 46,
-        scoreScale: 68,
-        scoreX: 0,
-        scoreY: 0,
-        scoreWhiteCut: 84,
-        scoreInkBoost: 18,
-        backgroundMode: 'Deep Blue',
-      })
-    }
   }
 
   const beatsPerBar = useMemo(() => {
@@ -1203,12 +1090,14 @@ function App() {
   }, [volume])
 
   const scoreOpacityRatio = useMemo(() => {
-    return Math.min(Math.max(scoreOpacity, 0), 100) / 100
-  }, [scoreOpacity])
+    return scoreRenderMode === 'plain' 
+      ? 1 
+      : Math.min(Math.max(activeScoreOpacity, 0), 100) / 100
+  }, [activeScoreOpacity, scoreRenderMode])
 
   const scoreScaleRatio = useMemo(() => {
-    return Math.min(Math.max(scoreScale, 20), 160) / 100
-  }, [scoreScale])
+    return Math.min(Math.max(activeScoreScale, 20), 160) / 100
+  }, [activeScoreScale])
 
   const backgroundInlineStyle = useMemo<CSSProperties>(() => {
     if (backgroundMode === 'Image') {
@@ -1467,8 +1356,8 @@ function App() {
     const imageData = context.getImageData(0, 0, width, height)
     const data = imageData.data
 
-    const paperCutRatio = Math.min(Math.max(scoreWhiteCut, 50), 95) / 100
-    const inkLiftRatio = Math.min(Math.max(scoreInkBoost, 0), 60) / 60
+    const paperCutRatio = Math.min(Math.max(activeScoreWhiteCut, 50), 95) / 100
+    const inkLiftRatio = Math.min(Math.max(activeScoreInkBoost, 0), 60) / 60
 
     const whiteThreshold = 255 - paperCutRatio * 185
     const fadeRange = Math.max(1, 255 - whiteThreshold)
@@ -1595,7 +1484,7 @@ function App() {
         pageCount: totalPages,
       })
 
-      updateSlotPageInDB(slotIndex, safePageNumber).catch((err) => {
+      updateSlotMetadataInDB(slotIndex, { pageNumber: safePageNumber }).catch((err) => {
         console.error('Failed to update PDF page in DB:', err)
       })
 
@@ -1638,7 +1527,14 @@ function App() {
 
       await renderPdfPage(activePdfSlotIndex, 1, pdf, file.name)
 
-      saveSlotToDB(activePdfSlotIndex, bufferForDb, file.name, 1, pdf.numPages).catch((err) => {
+      saveSlotToDB(
+        activePdfSlotIndex, 
+        bufferForDb, 
+        file.name, 
+        1, 
+        pdf.numPages,
+        pdfSlots[activePdfSlotIndex]
+      ).catch((err) => {
         console.error('Failed to save PDF to DB:', err)
       })
     } catch (error) {
@@ -1689,6 +1585,43 @@ function App() {
     }
   }
 
+  // 💡 Reader Paradigm 移行: Timer処理の分離
+  const hideTimerIdRef = useRef<number | undefined>(undefined)
+
+  const showUi = useCallback(() => {
+    setIsUiVisible(true)
+
+    if (hideTimerIdRef.current) {
+      window.clearTimeout(hideTimerIdRef.current)
+    }
+
+    if (scoreRenderMode === 'tune' && isTonePlaying) {
+      return
+    }
+
+    const timeoutMs = scoreRenderMode === 'tune' ? 2000 : 3000
+
+    hideTimerIdRef.current = window.setTimeout(() => {
+      setIsUiVisible(false)
+    }, timeoutMs)
+  }, [scoreRenderMode, isTonePlaying])
+
+  const hideUi = useCallback(() => {
+    setIsUiVisible(false)
+    if (hideTimerIdRef.current) {
+      window.clearTimeout(hideTimerIdRef.current)
+      hideTimerIdRef.current = undefined
+    }
+  }, [])
+
+  const toggleUi = useCallback(() => {
+    if (isUiVisible) {
+      hideUi()
+    } else {
+      showUi()
+    }
+  }, [isUiVisible, hideUi, showUi])
+
   const swipeHandlers = useSwipe(
     () => {
       if (isPdfLoaded && pdfPageNumber < pdfPageCount && !isRenderingPdfRef.current) {
@@ -1699,6 +1632,10 @@ function App() {
       if (isPdfLoaded && pdfPageNumber > 1 && !isRenderingPdfRef.current) {
         showPreviousPdfPage()
       }
+    },
+    () => {
+      // 💡 Reader Paradigm: タップ（クリック）でUIをトグルする
+      toggleUi()
     },
     400
   )
@@ -1733,7 +1670,13 @@ function App() {
                 pdf,
                 fileName: saved.fileName,
                 pageNumber: saved.pageNumber,
-               pageCount: saved.pageCount,
+                pageCount: saved.pageCount,
+                scoreScale: saved.scoreScale ?? 72,
+                scoreX: saved.scoreX ?? 0,
+                scoreY: saved.scoreY ?? 0,
+                scoreOpacity: saved.scoreOpacity ?? 70,
+                scoreWhiteCut: saved.scoreWhiteCut ?? 80,
+                scoreInkBoost: saved.scoreInkBoost ?? 30,
               }
               activePdfToRender = pdf
               activePageToRender = saved.pageNumber
@@ -1745,6 +1688,12 @@ function App() {
                 fileName: saved.fileName,
                 pageNumber: saved.pageNumber,
                 pageCount: saved.pageCount,
+                scoreScale: saved.scoreScale ?? 72,
+                scoreX: saved.scoreX ?? 0,
+                scoreY: saved.scoreY ?? 0,
+                scoreOpacity: saved.scoreOpacity ?? 70,
+                scoreWhiteCut: saved.scoreWhiteCut ?? 80,
+                scoreInkBoost: saved.scoreInkBoost ?? 30,
               }
             }
           } else {
@@ -1752,7 +1701,13 @@ function App() {
               pdf: null,
               fileName: saved.fileName,
               pageNumber: saved.pageNumber,
-               pageCount: saved.pageCount,
+              pageCount: saved.pageCount,
+              scoreScale: saved.scoreScale ?? 72,
+              scoreX: saved.scoreX ?? 0,
+              scoreY: saved.scoreY ?? 0,
+              scoreOpacity: saved.scoreOpacity ?? 70,
+              scoreWhiteCut: saved.scoreWhiteCut ?? 80,
+              scoreInkBoost: saved.scoreInkBoost ?? 30,
             }
           }
         }
@@ -1819,49 +1774,34 @@ function App() {
   }, [
     isScoreVisible,
     isScoreImageLoaded,
-    scoreWhiteCut,
-    scoreInkBoost,
+    activeScoreWhiteCut,
+    activeScoreInkBoost,
     scoreImageSource,
     scoreRenderMode,
   ])
 
+  // 💡 Reader Paradigm 移行: 初期化とモード変更時の表示保証
   useEffect(() => {
-    let hideTimerId: number | undefined
-
-    const showUi = () => {
-      setIsUiVisible(true)
-
-      if (hideTimerId) {
-        window.clearTimeout(hideTimerId)
-      }
-
-      if (scoreRenderMode === 'tune' && isTonePlaying) {
-        return
-      }
-
-      const timeoutMs = scoreRenderMode === 'tune' ? 2000 : 3000
-
-      hideTimerId = window.setTimeout(() => {
-        setIsUiVisible(false)
-      }, timeoutMs)
-    }
-
-    window.addEventListener('mousemove', showUi)
-    window.addEventListener('keydown', showUi)
-    window.addEventListener('pointerdown', showUi)
-
     showUi()
+    return () => {
+      if (hideTimerIdRef.current) window.clearTimeout(hideTimerIdRef.current)
+    }
+  }, [showUi])
+
+  // 💡 Reader Paradigm 移行: UI表示中のみ防衛線（タイマー延長）を張る
+  useEffect(() => {
+    if (!isUiVisible) return
+
+    const resetTimer = () => showUi()
+
+    window.addEventListener('mousemove', resetTimer)
+    window.addEventListener('keydown', resetTimer)
 
     return () => {
-      window.removeEventListener('mousemove', showUi)
-      window.removeEventListener('keydown', showUi)
-      window.removeEventListener('pointerdown', showUi)
-
-      if (hideTimerId) {
-        window.clearTimeout(hideTimerId)
-      }
+      window.removeEventListener('mousemove', resetTimer)
+      window.removeEventListener('keydown', resetTimer)
     }
-  }, [scoreRenderMode, isTonePlaying])
+  }, [isUiVisible, showUi])
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -1907,8 +1847,8 @@ function App() {
           '--large-ripple-intensity': largeRippleIntensity / 100,
           '--score-opacity': scoreOpacityRatio,
           '--score-scale': scoreScaleRatio,
-          '--score-x': `${scoreX}px`,
-          '--score-y': `${scoreY}px`,
+          '--score-x': `${activeScoreX}px`,
+          '--score-y': `${activeScoreY}px`,
           '--tune-y': `${finalTuneY}px`,
           '--tune-brightness': tuneCanvasBrightness
         } as CSSProperties
@@ -2182,24 +2122,6 @@ function App() {
             </label>
 
             <label className="compact-control sound-control">
-              <span>Preset</span>
-              <select
-                value={selectedPreset}
-                onChange={(event) =>
-                  updateSettings({
-                    selectedPreset: event.target.value as PresetName,
-                  })
-                }
-              >
-                {presetOptions.map((preset) => (
-                  <option key={preset} value={preset}>
-                    {preset}
-                  </option>
-                ))}
-              </select>
-             </label>
-
-            <label className="compact-control sound-control">
               <span>Background</span>
               <select
                 value={backgroundMode}
@@ -2261,16 +2183,6 @@ function App() {
                 ))}
               </select>
             </label>
-
-            <div className="score-switch-group">
-              <button className="score-switch" onClick={applyPreset}>
-                Apply
-              </button>
-
-              <button className="score-switch" onClick={saveCurrentPreset}>
-                 Save Current
-              </button>
-            </div>
 
             <div className="score-switch-group">
               <button
@@ -2431,14 +2343,10 @@ function App() {
                 type="range"
                 min="0"
                 max="100"
-                value={scoreOpacity}
-                onChange={(event) =>
-                  updateSettings({
-                    scoreOpacity: Number(event.target.value),
-                  })
-                }
+                value={activeScoreOpacity}
+                onChange={(event) => updateActiveSlotSettings({ scoreOpacity: Number(event.target.value) })}
               />
-              <em>{scoreOpacity}</em>
+              <em>{activeScoreOpacity}</em>
             </label>
 
             <label className="slider-control">
@@ -2447,14 +2355,10 @@ function App() {
                 type="range"
                 min="20"
                 max="160"
-                value={scoreScale}
-                onChange={(event) =>
-                   updateSettings({
-                    scoreScale: Number(event.target.value),
-                  })
-                }
+                value={activeScoreScale}
+                onChange={(event) => updateActiveSlotSettings({ scoreScale: Number(event.target.value) })}
               />
-              <em>{scoreScale}</em>
+              <em>{activeScoreScale}</em>
             </label>
 
             <label className="slider-control">
@@ -2463,14 +2367,10 @@ function App() {
                 type="range"
                 min="-400"
                 max="400"
-                value={scoreX}
-                onChange={(event) =>
-                  updateSettings({
-                    scoreX: Number(event.target.value),
-                  })
-                }
+                value={activeScoreX}
+                onChange={(event) => updateActiveSlotSettings({ scoreX: Number(event.target.value) })}
               />
-              <em>{scoreX}</em>
+              <em>{activeScoreX}</em>
             </label>
 
             <label className="slider-control">
@@ -2479,14 +2379,10 @@ function App() {
                 type="range"
                 min="-300"
                 max="300"
-                value={scoreY}
-                onChange={(event) =>
-                  updateSettings({
-                     scoreY: Number(event.target.value),
-                  })
-                }
+                value={activeScoreY}
+                onChange={(event) => updateActiveSlotSettings({ scoreY: Number(event.target.value) })}
               />
-              <em>{scoreY}</em>
+              <em>{activeScoreY}</em>
             </label>
 
             <label className="slider-control">
@@ -2495,14 +2391,10 @@ function App() {
                 type="range"
                 min="50"
                 max="95"
-                value={scoreWhiteCut}
-                onChange={(event) =>
-                  updateSettings({
-                    scoreWhiteCut: Number(event.target.value),
-                  })
-                }
+                value={activeScoreWhiteCut}
+                onChange={(event) => updateActiveSlotSettings({ scoreWhiteCut: Number(event.target.value) })}
               />
-              <em>{scoreWhiteCut}</em>
+              <em>{activeScoreWhiteCut}</em>
             </label>
 
             <label className="slider-control">
@@ -2511,14 +2403,10 @@ function App() {
                 type="range"
                 min="0"
                 max="60"
-                value={scoreInkBoost}
-                onChange={(event) =>
-                  updateSettings({
-                    scoreInkBoost: Number(event.target.value),
-                  })
-                 }
+                value={activeScoreInkBoost}
+                onChange={(event) => updateActiveSlotSettings({ scoreInkBoost: Number(event.target.value) })}
               />
-              <em>{scoreInkBoost}</em>
+              <em>{activeScoreInkBoost}</em>
             </label>
           </div>
         </div>
@@ -2539,7 +2427,6 @@ function App() {
         <span>
           {isPdfLoaded ? `PDF ${pdfPageNumber}/${pdfPageCount}` : 'PDF --'}
         </span>
-        <span>{selectedPreset}</span>
         <span>
           {timeSignature === 'Free'
             ? 'No Meter'
@@ -3511,11 +3398,9 @@ export type VisualEffect = 'Ripple' | 'Ghost Sweep' | 'None'
 
 export type BackgroundMode = 'Image' | 'Void Black' | 'Warm Gray' | 'Deep Blue' | 'Paper Dark'
 
-export type PresetName = 'Current' | 'Void / Score Float' | 'Void / Practice' | 'Void / Recording' | 'Void / Night' | 'My Saved Preset'
-
 export type BeatIntensity = 'High' | 'Mid' | 'Low'
 
-export type PresetValues = {
+export type SavedSettings = {
   bpm: number
   timeSignature: TimeSignature
   breathIntensity: number
@@ -3526,19 +3411,8 @@ export type PresetValues = {
   visualEffect: VisualEffect
   volume: number
   isScoreVisible: boolean
-  scoreOpacity: number
-  scoreScale: number
-  scoreX: number
-  scoreY: number
-  scoreWhiteCut: number
-  scoreInkBoost: number
   backgroundMode: BackgroundMode
-}
-
-export type SavedSettings = PresetValues & {
   isDebugEnabled: boolean
-  selectedPreset: PresetName
-  savedPreset: PresetValues | null
 }
 
 export type DebugMetrics = {
@@ -3551,11 +3425,16 @@ export type DebugMetrics = {
 
 export type PdfSlot = {
   // pdfjs-distの型解決エラーによる連鎖パース崩壊を防ぐため、anyで防壁を構築。
-  // 描画エンジン内部で処理されるオブジェクトをここで厳密に縛る必要はございません。
   pdf: any
   fileName: string
   pageNumber: number
   pageCount: number
+  scoreScale: number
+  scoreX: number
+  scoreY: number
+  scoreOpacity: number
+  scoreWhiteCut: number
+  scoreInkBoost: number
 }
 
 ===== C:\Users\tasuk\dev\void-pulse-canvas\src\utils\constants.ts =====
@@ -3565,8 +3444,6 @@ import type {
   ClickSubdivision,
   VisualEffect,
   BackgroundMode,
-  PresetName,
-  PresetValues,
   SavedSettings,
 } from '../types'
 
@@ -3574,7 +3451,7 @@ export const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
 export const DEFAULT_SCORE_IMAGE_SRC = '/images/score-overlay-01.png'
 export const PDF_SLOT_COUNT = 10
 
-export const defaultPresetValues: PresetValues = {
+export const defaultSettings: SavedSettings = {
   bpm: 105,
   timeSignature: '4/4',
   breathIntensity: 40,
@@ -3585,20 +3462,8 @@ export const defaultPresetValues: PresetValues = {
   visualEffect: 'Ripple',
   volume: 70,
   isScoreVisible: false,
-  scoreOpacity: 70,
-  scoreScale: 72,
-  scoreX: 0,
-  scoreY: 0,
-  scoreWhiteCut: 80,
-  scoreInkBoost: 30,
   backgroundMode: 'Image',
-}
-
-export const defaultSettings: SavedSettings = {
-  ...defaultPresetValues,
   isDebugEnabled: false,
-  selectedPreset: 'Current',
-  savedPreset: null,
 }
 
 export const clickSoundOptions: ClickSound[] = [
@@ -3612,15 +3477,6 @@ export const clickSoundOptions: ClickSound[] = [
 export const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth']
 export const visualEffectOptions: VisualEffect[] = ['Ripple', 'Ghost Sweep', 'None']
 
-export const presetOptions: PresetName[] = [
-  'Current',
-  'Void / Score Float',
-  'Void / Practice',
-  'Void / Recording',
-  'Void / Night',
-  'My Saved Preset',
-]
-
 export const backgroundModeOptions: BackgroundMode[] = [
   'Image',
   'Void Black',
@@ -3631,8 +3487,10 @@ export const backgroundModeOptions: BackgroundMode[] = [
 
 ===== C:\Users\tasuk\dev\void-pulse-canvas\src\utils\db.ts =====
 // src/utils/db.ts
+import type { PdfSlot } from '../types'
+
 const DB_NAME = 'VoidPulseCanvasDB'
-const DB_VERSION = 1
+const DB_VERSION = 2 // 演奏空間メタデータ拡張によりバージョンを引き上げ
 const STORE_NAME = 'pdfSlots'
 
 export const openDB = (): Promise<IDBDatabase> => {
@@ -3654,13 +3512,26 @@ export const saveSlotToDB = async (
   pdfData: ArrayBuffer,
   fileName: string,
   pageNumber: number,
-  pageCount: number
+  pageCount: number,
+  slotData: Partial<PdfSlot>
 ): Promise<void> => {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
-    store.put({ slotIndex, pdfData, fileName, pageNumber, pageCount })
+    store.put({ 
+      slotIndex, 
+      pdfData, 
+      fileName, 
+      pageNumber, 
+      pageCount,
+      scoreScale: slotData.scoreScale ?? 72,
+      scoreX: slotData.scoreX ?? 0,
+      scoreY: slotData.scoreY ?? 0,
+      scoreOpacity: slotData.scoreOpacity ?? 70,
+      scoreWhiteCut: slotData.scoreWhiteCut ?? 80,
+      scoreInkBoost: slotData.scoreInkBoost ?? 30
+    })
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
@@ -3677,16 +3548,17 @@ export const loadSlotsFromDB = async (): Promise<any[]> => {
   })
 }
 
-export const updateSlotPageInDB = async (slotIndex: number, pageNumber: number): Promise<void> => {
+export const updateSlotMetadataInDB = async (slotIndex: number, metadata: Partial<PdfSlot>): Promise<void> => {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
     const request = store.get(slotIndex)
+   
     request.onsuccess = () => {
       const data = request.result
       if (data) {
-        data.pageNumber = pageNumber
+        Object.assign(data, metadata)
         store.put(data)
       }
     }
@@ -3714,8 +3586,6 @@ import type {
   ClickSubdivision,
   VisualEffect,
   BackgroundMode,
-  PresetName,
-  PresetValues,
   SavedSettings,
   PdfSlot,
 } from '../types'
@@ -3723,7 +3593,6 @@ import type {
 import {
   STORAGE_KEY,
   PDF_SLOT_COUNT,
-  defaultPresetValues,
   defaultSettings,
 } from './constants'
 
@@ -3732,6 +3601,12 @@ export const createEmptyPdfSlot = (): PdfSlot => ({
   fileName: '',
   pageNumber: 1,
   pageCount: 0,
+  scoreScale: 72,
+  scoreX: 0,
+  scoreY: 0,
+  scoreOpacity: 70,
+  scoreWhiteCut: 80,
+  scoreInkBoost: 30,
 })
 
 export const createInitialPdfSlots = (): PdfSlot[] =>
@@ -3768,25 +3643,11 @@ export const isClickSound = (value: unknown): value is ClickSound => {
 }
 
 export const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
-  return value === 'Quarter' ||
-    value === 'Eighth'
+  return value === 'Quarter' || value === 'Eighth'
 }
 
 export const isVisualEffect = (value: unknown): value is VisualEffect => {
-  return value === 'Ripple' ||
-    value === 'Ghost Sweep' ||
-    value === 'None'
-}
-
-export const isPresetName = (value: unknown): value is PresetName => {
-  return (
-    value === 'Current' ||
-    value === 'Void / Score Float' ||
-    value === 'Void / Practice' ||
-    value === 'Void / Recording' ||
-    value === 'Void / Night' ||
-    value === 'My Saved Preset'
-  )
+  return value === 'Ripple' || value === 'Ghost Sweep' || value === 'None'
 }
 
 export const isBackgroundMode = (value: unknown): value is BackgroundMode => {
@@ -3799,123 +3660,28 @@ export const isBackgroundMode = (value: unknown): value is BackgroundMode => {
   )
 }
 
-export const normalizePresetValues = (
-  value: Partial<PresetValues> | null | undefined,
-  fallback: PresetValues,
-): PresetValues => {
-  return {
-    bpm: clampNumber(value?.bpm, 30, 240, fallback.bpm),
-
-    timeSignature: isTimeSignature(value?.timeSignature)
-      ? value.timeSignature
-      : fallback.timeSignature,
-
-    breathIntensity: clampNumber(
-      value?.breathIntensity,
-      0,
-      100,
-      fallback.breathIntensity,
-    ),
-
-    smallRippleIntensity: clampNumber(
-      value?.smallRippleIntensity,
-      0,
-      100,
-      fallback.smallRippleIntensity,
-    ),
-
-    largeRippleIntensity: clampNumber(
-      value?.largeRippleIntensity,
-      0,
-      100,
-      fallback.largeRippleIntensity,
-    ),
-
-    clickSound: isClickSound(value?.clickSound)
-      ? value.clickSound
-      : fallback.clickSound,
-
-    clickSubdivision: isClickSubdivision(value?.clickSubdivision)
-      ? value.clickSubdivision
-      : fallback.clickSubdivision,
-
-    visualEffect: isVisualEffect(value?.visualEffect)
-      ? value.visualEffect
-      : fallback.visualEffect,
-
-    volume: clampNumber(value?.volume, 0, 100, fallback.volume),
-
-    isScoreVisible:
-      typeof value?.isScoreVisible === 'boolean'
-        ? value.isScoreVisible
-        : fallback.isScoreVisible,
-
-    scoreOpacity: clampNumber(
-      value?.scoreOpacity,
-      0,
-      100,
-      fallback.scoreOpacity,
-    ),
-
-    scoreScale: clampNumber(value?.scoreScale, 20, 160, fallback.scoreScale),
-
-    scoreX: clampNumber(value?.scoreX, -400, 400, fallback.scoreX),
-
-    scoreY: clampNumber(value?.scoreY, -300, 300, fallback.scoreY),
-
-    scoreWhiteCut: clampNumber(
-      value?.scoreWhiteCut,
-      50,
-      95,
-      fallback.scoreWhiteCut,
-    ),
-
-    scoreInkBoost: clampNumber(
-      value?.scoreInkBoost,
-      0,
-      60,
-      fallback.scoreInkBoost,
-    ),
-
-    backgroundMode: isBackgroundMode(value?.backgroundMode)
-      ? value.backgroundMode
-      : fallback.backgroundMode,
-  }
-}
-
 export function loadSettings(): SavedSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-
     if (!raw) {
       return defaultSettings
     }
 
     const parsed = JSON.parse(raw) as Partial<SavedSettings>
 
-    const normalizedPresetValues = normalizePresetValues(
-      parsed,
-      defaultPresetValues,
-    )
-
-    const savedPreset =
-      parsed.savedPreset && typeof parsed.savedPreset === 'object'
-        ? normalizePresetValues(parsed.savedPreset, defaultPresetValues)
-        : null
-
     return {
-      ...normalizedPresetValues,
-
-      isDebugEnabled:
-        typeof parsed.isDebugEnabled === 'boolean'
-          ? parsed.isDebugEnabled
-          : defaultSettings.isDebugEnabled,
-
-      selectedPreset: isPresetName(parsed.selectedPreset)
-        ? parsed.selectedPreset
-        : defaultSettings.selectedPreset,
-
-      savedPreset,
+      bpm: clampNumber(parsed.bpm, 30, 240, defaultSettings.bpm),
+      timeSignature: isTimeSignature(parsed.timeSignature) ? parsed.timeSignature : defaultSettings.timeSignature,
+      breathIntensity: clampNumber(parsed.breathIntensity, 0, 100, defaultSettings.breathIntensity),
+      smallRippleIntensity: clampNumber(parsed.smallRippleIntensity, 0, 100, defaultSettings.smallRippleIntensity),
+      largeRippleIntensity: clampNumber(parsed.largeRippleIntensity, 0, 100, defaultSettings.largeRippleIntensity),
+      clickSound: isClickSound(parsed.clickSound) ? parsed.clickSound : defaultSettings.clickSound,
+      clickSubdivision: isClickSubdivision(parsed.clickSubdivision) ? parsed.clickSubdivision : defaultSettings.clickSubdivision,
+      visualEffect: isVisualEffect(parsed.visualEffect) ? parsed.visualEffect : defaultSettings.visualEffect,
+      volume: clampNumber(parsed.volume, 0, 100, defaultSettings.volume),
+      isScoreVisible: typeof parsed.isScoreVisible === 'boolean' ? parsed.isScoreVisible : defaultSettings.isScoreVisible,
+      backgroundMode: isBackgroundMode(parsed.backgroundMode) ? parsed.backgroundMode : defaultSettings.backgroundMode,
+      isDebugEnabled: typeof parsed.isDebugEnabled === 'boolean' ? parsed.isDebugEnabled : defaultSettings.isDebugEnabled,
     }
   } catch {
     return defaultSettings
