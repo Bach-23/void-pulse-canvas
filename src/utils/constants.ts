@@ -19,7 +19,7 @@ export const defaultSettings: SavedSettings = {
   largeRippleIntensity: 40,
   clickSound: 'Soft Tick',
   clickSubdivision: 'Quarter',
-  visualEffect: 'Ripple',
+  visualEffect: 'Ghost Sweep',
   volume: 70,
   isScoreVisible: false,
   backgroundMode: 'Image',
@@ -34,8 +34,8 @@ export const clickSoundOptions: ClickSound[] = [
   'Muted Key',
 ]
 
-export const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth']
-export const visualEffectOptions: VisualEffect[] = ['Ripple', 'Ghost Sweep', 'None']
+export const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth', 'Triplet', 'Sixteenth']
+export const visualEffectOptions: VisualEffect[] = ['Ghost Sweep', 'Ripple', 'None']
 
 export const backgroundModeOptions: BackgroundMode[] = [
   'Image',

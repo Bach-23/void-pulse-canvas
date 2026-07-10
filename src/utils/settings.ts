@@ -62,11 +62,16 @@ export const isClickSound = (value: unknown): value is ClickSound => {
 }
 
 export const isClickSubdivision = (value: unknown): value is ClickSubdivision => {
-  return value === 'Quarter' || value === 'Eighth'
+  return (
+    value === 'Quarter' ||
+    value === 'Eighth' ||
+    value === 'Triplet' ||
+    value === 'Sixteenth'
+  )
 }
 
 export const isVisualEffect = (value: unknown): value is VisualEffect => {
-  return value === 'Ripple' || value === 'Ghost Sweep' || value === 'None'
+  return value === 'Ghost Sweep' || value === 'Ripple' || value === 'None'
 }
 
 export const isBackgroundMode = (value: unknown): value is BackgroundMode => {

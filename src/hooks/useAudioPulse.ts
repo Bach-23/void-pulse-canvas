@@ -246,6 +246,24 @@ export function useAudioPulse({
             } else {
               playOscillatorClick(ctx, eighthTime, 'Low', clickSound)
             }
+          } else if (clickSubdivision === 'Triplet') {
+            for (let i = 1; i < 3; i++) {
+              const tripletTime = nextNoteTime + (beatDuration * i) / 3
+              if (clickSound === 'Breath') {
+                playBreathClick(ctx, tripletTime, 'Low')
+              } else {
+                playOscillatorClick(ctx, tripletTime, 'Low', clickSound)
+              }
+            }
+          } else if (clickSubdivision === 'Sixteenth') {
+            for (let i = 1; i < 4; i++) {
+              const sixteenthTime = nextNoteTime + (beatDuration * i) / 4
+              if (clickSound === 'Breath') {
+                playBreathClick(ctx, sixteenthTime, 'Low')
+              } else {
+                playOscillatorClick(ctx, sixteenthTime, 'Low', clickSound)
+              }
+            }
           }
         }
 

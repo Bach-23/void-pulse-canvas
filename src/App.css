@@ -238,7 +238,7 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 1px;
+  width: 1.7px;
   background: rgba(230, 238, 255, 0.85);
   transform-origin: center;
 }
