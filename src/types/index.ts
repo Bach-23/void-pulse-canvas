@@ -6,9 +6,13 @@ export type ClickSubdivision = 'Quarter' | 'Eighth' | 'Triplet' | 'Sixteenth'
 
 export type VisualEffect = 'Ghost Sweep' | 'Ripple' | 'None'
 
-export type BackgroundMode = 'Image' | 'Void Black' | 'Warm Gray' | 'Deep Blue' | 'Paper Dark'
+export type SpaceMode = 'Void' | 'Dark' | 'Blue'
 
 export type BeatIntensity = 'High' | 'Mid' | 'Low'
+
+export type ViewMode = 'void' | 'plain' | 'tune'
+
+export type SwipeMode = 'Score' | 'Book'
 
 export type SavedSettings = {
   bpm: number
@@ -21,8 +25,9 @@ export type SavedSettings = {
   visualEffect: VisualEffect
   volume: number
   isScoreVisible: boolean
-  backgroundMode: BackgroundMode
+  spaceMode: SpaceMode
   isDebugEnabled: boolean
+  isBarAccentEnabled: boolean
 }
 
 export type DebugMetrics = {
@@ -45,4 +50,5 @@ export type PdfSlot = {
   scoreOpacity: number
   scoreWhiteCut: number
   scoreInkBoost: number
+  swipeMode: SwipeMode
 }

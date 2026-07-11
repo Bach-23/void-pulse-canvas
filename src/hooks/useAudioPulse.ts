@@ -10,6 +10,7 @@ type UseAudioPulseProps = {
   clickSound: ClickSound
   clickSubdivision: ClickSubdivision
   volumeRatio: number
+  isBarAccentEnabled: boolean
 }
 
 export function useAudioPulse({
@@ -21,6 +22,7 @@ export function useAudioPulse({
   clickSound,
   clickSubdivision,
   volumeRatio,
+  isBarAccentEnabled,
 }: UseAudioPulseProps) {
   const audioContextRef = useRef<AudioContext | null>(null)
   const startTimeRef = useRef<number | null>(null)
@@ -230,7 +232,9 @@ export function useAudioPulse({
       while (nextNoteTime < ctx.currentTime + scheduleAheadTime) {
         const currentBeatInBar = beatsPerBar === 1 ? 0 : scheduledBeatIndex % beatsPerBar
         const isBarHead = timeSignature !== 'Free' && currentBeatInBar === 0
-        const intensity: BeatIntensity = timeSignature === 'Free' ? 'Mid' : (isBarHead ? 'High' : 'Mid')
+        
+        // アクセントのON/OFF判定を美しく組み込み
+        const intensity: BeatIntensity = timeSignature === 'Free' ? 'Mid' : (isBarHead && isBarAccentEnabled ? 'High' : 'Mid')
         
         if (isAudioEnabled && volumeRatio > 0) {
           if (clickSound === 'Breath') {
@@ -300,6 +304,7 @@ export function useAudioPulse({
     clickSound,
     clickSubdivision,
     volumeRatio,
+    isBarAccentEnabled,
     ensureAudioContext,
     playBreathClick,
     playOscillatorClick,

@@ -3,8 +3,9 @@ import type {
   ClickSound,
   ClickSubdivision,
   VisualEffect,
-  BackgroundMode,
+  SpaceMode,
   SavedSettings,
+  SwipeMode,
 } from '../types'
 
 export const STORAGE_KEY = 'void-pulse-canvas-settings-v1'
@@ -22,8 +23,9 @@ export const defaultSettings: SavedSettings = {
   visualEffect: 'Ghost Sweep',
   volume: 70,
   isScoreVisible: false,
-  backgroundMode: 'Image',
+  spaceMode: 'Dark',
   isDebugEnabled: false,
+  isBarAccentEnabled: true,
 }
 
 export const clickSoundOptions: ClickSound[] = [
@@ -37,10 +39,5 @@ export const clickSoundOptions: ClickSound[] = [
 export const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth', 'Triplet', 'Sixteenth']
 export const visualEffectOptions: VisualEffect[] = ['Ghost Sweep', 'Ripple', 'None']
 
-export const backgroundModeOptions: BackgroundMode[] = [
-  'Image',
-  'Void Black',
-  'Warm Gray',
-  'Deep Blue',
-  'Paper Dark',
-]
+export const spaceModeOptions: SpaceMode[] = ['Void', 'Dark', 'Blue']
+export const swipeModeOptions: SwipeMode[] = ['Score', 'Book']

@@ -7,6 +7,7 @@ import type {
   BackgroundMode,
   SavedSettings,
   PdfSlot,
+  SwipeMode,
 } from '../types'
 
 import {
@@ -26,6 +27,7 @@ export const createEmptyPdfSlot = (): PdfSlot => ({
   scoreOpacity: 70,
   scoreWhiteCut: 80,
   scoreInkBoost: 30,
+  swipeMode: 'Score',
 })
 
 export const createInitialPdfSlots = (): PdfSlot[] =>
@@ -84,6 +86,10 @@ export const isBackgroundMode = (value: unknown): value is BackgroundMode => {
   )
 }
 
+export const isSwipeMode = (value: unknown): value is SwipeMode => {
+  return value === 'Score' || value === 'Book'
+}
+
 export function loadSettings(): SavedSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -106,6 +112,7 @@ export function loadSettings(): SavedSettings {
       isScoreVisible: typeof parsed.isScoreVisible === 'boolean' ? parsed.isScoreVisible : defaultSettings.isScoreVisible,
       backgroundMode: isBackgroundMode(parsed.backgroundMode) ? parsed.backgroundMode : defaultSettings.backgroundMode,
       isDebugEnabled: typeof parsed.isDebugEnabled === 'boolean' ? parsed.isDebugEnabled : defaultSettings.isDebugEnabled,
+      isBarAccentEnabled: typeof parsed.isBarAccentEnabled === 'boolean' ? parsed.isBarAccentEnabled : defaultSettings.isBarAccentEnabled,
     }
   } catch {
     return defaultSettings

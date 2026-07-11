@@ -2,7 +2,7 @@
 import type { PdfSlot } from '../types'
 
 const DB_NAME = 'VoidPulseCanvasDB'
-const DB_VERSION = 2 // 演奏空間メタデータ拡張によりバージョンを引き上げ
+const DB_VERSION = 3 // PdfSlot拡張（swipeMode追加）に伴いバージョンを引き上げ
 const STORE_NAME = 'pdfSlots'
 
 export const openDB = (): Promise<IDBDatabase> => {
@@ -42,7 +42,8 @@ export const saveSlotToDB = async (
       scoreY: slotData.scoreY ?? 0,
       scoreOpacity: slotData.scoreOpacity ?? 70,
       scoreWhiteCut: slotData.scoreWhiteCut ?? 80,
-      scoreInkBoost: slotData.scoreInkBoost ?? 30
+      scoreInkBoost: slotData.scoreInkBoost ?? 30,
+      swipeMode: slotData.swipeMode ?? 'Score'
     })
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)

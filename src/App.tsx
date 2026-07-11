@@ -14,10 +14,12 @@ import type {
   ClickSound,
   ClickSubdivision,
   VisualEffect,
-  BackgroundMode,
+  SpaceMode,
   SavedSettings,
   DebugMetrics,
   PdfSlot,
+  ViewMode,
+  SwipeMode,
 } from './types'
 
 import {
@@ -32,7 +34,8 @@ import {
   clickSoundOptions,
   clickSubdivisionOptions,
   visualEffectOptions,
-  backgroundModeOptions,
+  spaceModeOptions,
+  swipeModeOptions,
 } from './utils/constants'
 
 import {
@@ -108,7 +111,7 @@ function App() {
 
   const [, forceFrame] = useState(0)
 
-  const [scoreRenderMode, setScoreRenderMode] = useState<'void' | 'plain' | 'tune'>('void')
+  const [viewMode, setViewMode] = useState<ViewMode>('void')
   const [tunePhase, setTunePhase] = useState<'idle' | 'absorb' | 'expand'>('idle')
   const [isTuneUiVisible, setIsTuneUiVisible] = useState(false)
   
@@ -155,7 +158,8 @@ function App() {
     volume,
     isDebugEnabled,
     isScoreVisible,
-    backgroundMode,
+    spaceMode,
+    isBarAccentEnabled,
   } = settings
 
   const activePdfSlot = pdfSlots[activePdfSlotIndex]
@@ -169,6 +173,7 @@ function App() {
   const activeScoreOpacity = activePdfSlot?.scoreOpacity ?? 70
   const activeScoreWhiteCut = activePdfSlot?.scoreWhiteCut ?? 80
   const activeScoreInkBoost = activePdfSlot?.scoreInkBoost ?? 30
+  const activeSwipeMode = activePdfSlot?.swipeMode ?? 'Score'
 
   const updateSettings = (nextSettings: Partial<SavedSettings>) => {
     setSettings((currentSettings) => ({
@@ -217,17 +222,17 @@ function App() {
   }, [volume])
 
   const scoreOpacityRatio = useMemo(() => {
-    return scoreRenderMode === 'plain' 
+    return viewMode === 'plain' 
       ? 1 
       : Math.min(Math.max(activeScoreOpacity, 0), 100) / 100
-  }, [activeScoreOpacity, scoreRenderMode])
+  }, [activeScoreOpacity, viewMode])
 
   const scoreScaleRatio = useMemo(() => {
     return Math.min(Math.max(activeScoreScale, 20), 160) / 100
   }, [activeScoreScale])
 
-  const backgroundInlineStyle = useMemo<CSSProperties>(() => {
-    if (backgroundMode === 'Image') {
+  const spaceInlineStyle = useMemo<CSSProperties>(() => {
+    if (spaceMode === 'Void') {
       return {
         backgroundImage:
           'linear-gradient(rgba(5, 6, 8, 0.08), rgba(5, 6, 8, 0.42)), url("/images/void-bg-01.jpg")',
@@ -235,23 +240,7 @@ function App() {
       }
     }
 
-    if (backgroundMode === 'Void Black') {
-      return {
-        backgroundImage:
-          'radial-gradient(circle at 50% 45%, rgba(35, 38, 46, 0.46), rgba(5, 6, 8, 1) 62%)',
-        backgroundColor: '#050608',
-      }
-    }
-
-    if (backgroundMode === 'Warm Gray') {
-      return {
-        backgroundImage:
-          'linear-gradient(135deg, rgba(60, 56, 50, 1), rgba(22, 21, 20, 1))',
-        backgroundColor: '#292622',
-      }
-    }
-
-    if (backgroundMode === 'Deep Blue') {
+    if (spaceMode === 'Blue') {
        return {
         backgroundImage:
           'radial-gradient(circle at 50% 40%, rgba(22, 40, 66, 0.95), rgba(4, 8, 16, 1) 68%)',
@@ -259,12 +248,13 @@ function App() {
       }
     }
 
+    // Default to Dark
     return {
       backgroundImage:
-        'linear-gradient(135deg, rgba(31, 32, 32, 1), rgba(11, 12, 12, 1))',
-      backgroundColor: '#151616',
+        'radial-gradient(circle at 50% 45%, rgba(35, 38, 46, 0.46), rgba(5, 6, 8, 1) 62%)',
+      backgroundColor: '#050608',
     }
-  }, [backgroundMode])
+  }, [spaceMode])
 
   const { ensureAudioContext, getElapsedTime } = useAudioPulse({
     isRunning,
@@ -275,23 +265,24 @@ function App() {
     clickSound,
     clickSubdivision,
     volumeRatio,
+    isBarAccentEnabled,
   })
 
   const { startTuner, stopTuner, tuneData } = useVoidTune(referenceHz)
 
   useEffect(() => {
-    if (scoreRenderMode === 'tune' && !isTonePlaying) {
+    if (viewMode === 'tune' && !isTonePlaying) {
       void startTuner()
     } else {
       void stopTuner()
     }
-  }, [scoreRenderMode, isTonePlaying, startTuner, stopTuner])
+  }, [viewMode, isTonePlaying, startTuner, stopTuner])
 
   const oscAudioCtxRef = useRef<AudioContext | null>(null)
   const oscNodeRef = useRef<OscillatorNode | null>(null)
 
   useEffect(() => {
-    if (isTonePlaying && scoreRenderMode === 'tune') {
+    if (isTonePlaying && viewMode === 'tune') {
       if (!oscAudioCtxRef.current) {
         oscAudioCtxRef.current = new window.AudioContext()
       }
@@ -333,10 +324,10 @@ function App() {
         }
       }
     }
-  }, [isTonePlaying, scoreRenderMode, referenceHz, selectedNote])
+  }, [isTonePlaying, viewMode, referenceHz, selectedNote])
 
   useEffect(() => {
-    if (!isRunning && scoreRenderMode !== 'tune') return
+    if (!isRunning && viewMode !== 'tune') return
     let frameId: number
     const loop = () => {
       forceFrame(n => n + 1)
@@ -344,7 +335,7 @@ function App() {
     }
     frameId = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(frameId)
-  }, [isRunning, scoreRenderMode])
+  }, [isRunning, viewMode])
 
   const elapsedTime = getElapsedTime()
 
@@ -431,7 +422,7 @@ function App() {
     }, 300)
 
     setTimeout(() => {
-      setScoreRenderMode('void')
+      setViewMode('void')
       setTunePhase('idle')
       setIsRunning(false)
       turnAudioOff()
@@ -476,7 +467,7 @@ function App() {
     context.clearRect(0, 0, width, height)
     context.drawImage(image, 0, 0, width, height)
 
-    if (scoreRenderMode === 'plain') {
+    if (viewMode === 'plain') {
       return
     }
 
@@ -681,6 +672,18 @@ function App() {
     void renderPdfPage(activePdfSlotIndex, pdfPageNumber + 1)
   }
 
+  const handleNextPage = useCallback(() => {
+    if (isPdfLoaded && pdfPageNumber < pdfPageCount && !isRenderingPdfRef.current) {
+      showNextPdfPage()
+    }
+  }, [isPdfLoaded, pdfPageNumber, pdfPageCount])
+
+  const handlePrevPage = useCallback(() => {
+    if (isPdfLoaded && pdfPageNumber > 1 && !isRenderingPdfRef.current) {
+      showPreviousPdfPage()
+    }
+  }, [isPdfLoaded, pdfPageNumber])
+
   const activatePdfSlot = async (slotIndex: number) => {
     setActivePdfSlotIndex(slotIndex)
 
@@ -722,16 +725,16 @@ function App() {
       window.clearTimeout(hideTimerIdRef.current)
     }
 
-    if (scoreRenderMode === 'tune' && isTonePlaying) {
+    if (viewMode === 'tune' && isTonePlaying) {
       return
     }
 
-    const timeoutMs = scoreRenderMode === 'tune' ? 2000 : 3000
+    const timeoutMs = viewMode === 'tune' ? 2000 : 3000
 
     hideTimerIdRef.current = window.setTimeout(() => {
       setIsUiVisible(false)
     }, timeoutMs)
-  }, [scoreRenderMode, isTonePlaying])
+  }, [viewMode, isTonePlaying])
 
   const hideUi = useCallback(() => {
     setIsUiVisible(false)
@@ -750,14 +753,18 @@ function App() {
   }, [isUiVisible, hideUi, showUi])
 
   const swipeHandlers = useSwipe(
-    () => {
-      if (isPdfLoaded && pdfPageNumber < pdfPageCount && !isRenderingPdfRef.current) {
-        showNextPdfPage()
+    () => { // onSwipeLeft (指を左へ弾く → 画面は右へ進む)
+      if (activeSwipeMode === 'Book') {
+        handlePrevPage()
+      } else {
+        handleNextPage()
       }
     },
-    () => {
-      if (isPdfLoaded && pdfPageNumber > 1 && !isRenderingPdfRef.current) {
-        showPreviousPdfPage()
+    () => { // onSwipeRight (指を右へ弾く → 画面は左へ戻る)
+      if (activeSwipeMode === 'Book') {
+        handleNextPage()
+      } else {
+        handlePrevPage()
       }
     },
     () => {
@@ -804,6 +811,7 @@ function App() {
                 scoreOpacity: saved.scoreOpacity ?? 70,
                 scoreWhiteCut: saved.scoreWhiteCut ?? 80,
                 scoreInkBoost: saved.scoreInkBoost ?? 30,
+                swipeMode: saved.swipeMode ?? 'Score',
               }
               activePdfToRender = pdf
               activePageToRender = saved.pageNumber
@@ -821,6 +829,7 @@ function App() {
                 scoreOpacity: saved.scoreOpacity ?? 70,
                 scoreWhiteCut: saved.scoreWhiteCut ?? 80,
                 scoreInkBoost: saved.scoreInkBoost ?? 30,
+                swipeMode: saved.swipeMode ?? 'Score',
               }
             }
           } else {
@@ -835,6 +844,7 @@ function App() {
               scoreOpacity: saved.scoreOpacity ?? 70,
               scoreWhiteCut: saved.scoreWhiteCut ?? 80,
               scoreInkBoost: saved.scoreInkBoost ?? 30,
+              swipeMode: saved.swipeMode ?? 'Score',
             }
           }
         }
@@ -904,7 +914,7 @@ function App() {
     activeScoreWhiteCut,
     activeScoreInkBoost,
     scoreImageSource,
-    scoreRenderMode,
+    viewMode,
   ])
 
   // 💡 Reader Paradigm 移行: 初期化とモード変更時の表示保証
@@ -963,7 +973,7 @@ function App() {
 
   return (
     <main
-      className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'} score-${scoreRenderMode}-mode phase-${tunePhase}`}
+      className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'} score-${viewMode}-mode phase-${tunePhase}`}
       {...swipeHandlers}
       style={
         {
@@ -997,13 +1007,14 @@ function App() {
         onChange={handleScorePdfChange}
       />
 
+      {/* 💡 CSSのクラス名は変更せず、変数名とUI上の意味だけをSpaceへ置換 */}
       <div
         className={`background ${isRunning ? 'is-running' : 'is-paused'}`}
-        style={backgroundInlineStyle}
+        style={spaceInlineStyle}
       />
 
       <div 
-        className={`tune-container ${tunePhase} ${scoreRenderMode === 'tune' ? 'is-visible' : 'is-hidden'}`}
+        className={`tune-container ${tunePhase} ${viewMode === 'tune' ? 'is-visible' : 'is-hidden'}`}
       >
         <div className="tune-side-line left" />
         <div className="tune-side-line right" />
@@ -1023,7 +1034,7 @@ function App() {
       <div
         className="score-overlay"
         style={{
-          opacity: isScoreVisible && scoreRenderMode !== 'tune' ? (scoreRenderMode === 'plain' ? 1 : undefined) : 0,
+          opacity: isScoreVisible && viewMode !== 'tune' ? (viewMode === 'plain' ? 1 : undefined) : 0,
         }}
       >
         <canvas ref={scoreCanvasRef} />
@@ -1097,7 +1108,7 @@ function App() {
            Tune the space before the sound.
         </p>
 
-        <div className={`standard-ui-controls ${scoreRenderMode !== 'tune' ? 'is-visible' : 'is-hidden'}`}>
+        <div className={`standard-ui-controls ${viewMode !== 'tune' ? 'is-visible' : 'is-hidden'}`}>
           <div className="primary-action-row">
             <button
               className={`pulse-button ${isRunning ? 'is-active' : ''}`}
@@ -1111,7 +1122,7 @@ function App() {
                 className="pulse-button"
                 style={{ marginLeft: '16px' }}
                 onClick={() => {
-                   setScoreRenderMode('tune')
+                   setViewMode('tune')
                   requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                       setIsTuneUiVisible(true)
@@ -1126,7 +1137,7 @@ function App() {
         </div>
 
         <div 
-          className={`tune-ui-controls ${scoreRenderMode === 'tune' && isTuneUiVisible ? 'is-visible' : 'is-hidden'}`}
+          className={`tune-ui-controls ${viewMode === 'tune' && isTuneUiVisible ? 'is-visible' : 'is-hidden'}`}
         >
           <div className="secondary-controls">
             <label className="compact-control">
@@ -1180,7 +1191,7 @@ function App() {
           </div>
         </div>
 
-        <div className={`standard-ui-controls ${scoreRenderMode !== 'tune' ? 'is-visible' : 'is-hidden'}`}>
+        <div className={`standard-ui-controls ${viewMode !== 'tune' ? 'is-visible' : 'is-hidden'}`}>
           <div className="secondary-controls">
             <label className="compact-control">
               <span>BPM</span>
@@ -1209,6 +1220,21 @@ function App() {
                 <option value="3/4">3/4</option>
                  <option value="4/4">4/4</option>
                 <option value="Free">Free</option>
+              </select>
+            </label>
+
+            <label className="compact-control sound-control">
+              <span>BAR ACCENT</span>
+              <select
+                 value={isBarAccentEnabled ? 'On' : 'Off'}
+                onChange={(event) =>
+                  updateSettings({
+                    isBarAccentEnabled: event.target.value === 'On',
+                  })
+               }
+              >
+                <option value="On">On</option>
+                <option value="Off">Off</option>
               </select>
             </label>
 
@@ -1249,16 +1275,16 @@ function App() {
             </label>
 
             <label className="compact-control sound-control">
-              <span>Background</span>
+              <span>SPACE</span>
               <select
-                value={backgroundMode}
+                value={spaceMode}
                 onChange={(event) =>
                   updateSettings({
-                    backgroundMode: event.target.value as BackgroundMode,
+                    spaceMode: event.target.value as SpaceMode,
                   })
                 }
               >
-                {backgroundModeOptions.map((mode) => (
+                {spaceModeOptions.map((mode) => (
                    <option key={mode} value={mode}>
                     {mode}
                   </option>
@@ -1285,15 +1311,29 @@ function App() {
             </label>
 
             <label className="compact-control sound-control">
-              <span>Score Mode</span>
+              <span>VIEW</span>
               <select
-                value={scoreRenderMode}
+                value={viewMode}
                 onChange={(event) =>
-                  setScoreRenderMode(event.target.value as 'void' | 'plain' | 'tune')
+                  setViewMode(event.target.value as ViewMode)
                 }
               >
                 <option value="void">Void</option>
                 <option value="plain">Plain</option>
+              </select>
+            </label>
+
+            <label className="compact-control sound-control">
+              <span>SWIPE</span>
+              <select
+                value={activeSwipeMode}
+                onChange={(event) => updateActiveSlotSettings({ swipeMode: event.target.value as SwipeMode })}
+              >
+                {swipeModeOptions.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
               </select>
             </label>
 
@@ -1545,9 +1585,9 @@ function App() {
         <span>{clickSound}</span>
         <span>{clickSubdivision}</span>
         <span>VOL {volume}</span>
-        <span>{backgroundMode}</span>
+        <span>{spaceMode}</span>
         <span>{visualEffect}</span>
-        <span>{scoreRenderMode === 'void' ? 'Void Mode' : scoreRenderMode === 'tune' ? 'Tune Mode' : 'Plain Mode'}</span>
+        <span>{viewMode === 'void' ? 'Void Mode' : viewMode === 'tune' ? 'Tune Mode' : 'Plain Mode'}</span>
         <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
         <span>{`Slot ${activePdfSlotIndex + 1}`}</span>
         <span>{scoreImageName}</span>
@@ -1569,7 +1609,7 @@ function App() {
           <span>Actual Sync Mode: Absolute Ref + forceFrame</span>
           <span>Elapsed: {(elapsedTime).toFixed(2)}s</span>
           <span>Beat Count: {debugMetrics.beatCount}</span>
-          <div className={`tune-ui-controls ${scoreRenderMode === 'tune' && isTuneUiVisible ? 'is-visible' : 'is-hidden'}`}>
+          <div className={`tune-ui-controls ${viewMode === 'tune' && isTuneUiVisible ? 'is-visible' : 'is-hidden'}`}>
            <span>Tune Hz Dist: {tuneData.distance.toFixed(3)}</span>
             <span>Tune Phase: {tunePhase}</span>
           </div>
