@@ -4,7 +4,7 @@ import type {
   ClickSound,
   ClickSubdivision,
   VisualEffect,
-  BackgroundMode,
+  SpaceMode,
   SavedSettings,
   PdfSlot,
   SwipeMode,
@@ -76,14 +76,8 @@ export const isVisualEffect = (value: unknown): value is VisualEffect => {
   return value === 'Ghost Sweep' || value === 'Ripple' || value === 'None'
 }
 
-export const isBackgroundMode = (value: unknown): value is BackgroundMode => {
-  return (
-    value === 'Image' ||
-    value === 'Void Black' ||
-    value === 'Warm Gray' ||
-    value === 'Deep Blue' ||
-    value === 'Paper Dark'
-  )
+export const isSpaceMode = (value: unknown): value is SpaceMode => {
+  return value === 'Void' || value === 'Dark' || value === 'Blue'
 }
 
 export const isSwipeMode = (value: unknown): value is SwipeMode => {
@@ -97,7 +91,19 @@ export function loadSettings(): SavedSettings {
       return defaultSettings
     }
 
-    const parsed = JSON.parse(raw) as Partial<SavedSettings>
+    const parsed = JSON.parse(raw) as Record<string, any>
+
+    let initialSpaceMode = parsed.spaceMode
+    if (!initialSpaceMode && parsed.backgroundMode) {
+      const oldBg = parsed.backgroundMode
+      if (oldBg === 'Image') {
+        initialSpaceMode = 'Void'
+      } else if (oldBg === 'Void Black' || oldBg === 'Warm Gray' || oldBg === 'Paper Dark') {
+        initialSpaceMode = 'Dark'
+      } else if (oldBg === 'Deep Blue') {
+        initialSpaceMode = 'Blue'
+      }
+    }
 
     return {
       bpm: clampNumber(parsed.bpm, 30, 240, defaultSettings.bpm),
@@ -110,7 +116,7 @@ export function loadSettings(): SavedSettings {
       visualEffect: isVisualEffect(parsed.visualEffect) ? parsed.visualEffect : defaultSettings.visualEffect,
       volume: clampNumber(parsed.volume, 0, 100, defaultSettings.volume),
       isScoreVisible: typeof parsed.isScoreVisible === 'boolean' ? parsed.isScoreVisible : defaultSettings.isScoreVisible,
-      backgroundMode: isBackgroundMode(parsed.backgroundMode) ? parsed.backgroundMode : defaultSettings.backgroundMode,
+      spaceMode: isSpaceMode(initialSpaceMode) ? initialSpaceMode : defaultSettings.spaceMode,
       isDebugEnabled: typeof parsed.isDebugEnabled === 'boolean' ? parsed.isDebugEnabled : defaultSettings.isDebugEnabled,
       isBarAccentEnabled: typeof parsed.isBarAccentEnabled === 'boolean' ? parsed.isBarAccentEnabled : defaultSettings.isBarAccentEnabled,
     }
