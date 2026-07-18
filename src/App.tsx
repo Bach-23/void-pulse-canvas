@@ -971,6 +971,117 @@ function App() {
   const centerWobble = tuneData.isStable ? (Math.sin(tuneTime * 0.35) * 3 + Math.sin(tuneTime * 0.5) * 0.15) : 0
   const finalTuneY = tuneY + centerWobble
 
+  // 💡 Beacon Sweep 専用描画レイヤー関数
+  const renderBeaconSweep = () => {
+    if (!isRunning || visualEffect !== 'Beacon Sweep') return null;
+
+    const exactBeat = elapsedTime > 0 ? elapsedTime / beatDuration : 0;
+    const beatProgress = exactBeat % 1;
+    
+    // Freeや特殊拍子はSquare(4拍子)として扱う
+    const isFree = timeSignature === 'Free';
+    const effectiveBeatsPerBar = isFree ? 4 : beatsPerBar; 
+    const currentBeatInBar = Math.floor(exactBeat) % effectiveBeatsPerBar;
+    
+    // 拍頭強調判定（アクセント有効かつ小節頭の場合のみさらに強く光る）
+    const isFirstBeat = !isFree && isBarAccentEnabled && currentBeatInBar === 0;
+    
+    // 状態判定：拍の直前（0.85〜）を予備発光、拍頭直後を瞬間発光とする
+    // 旦那様の至高のロジック：低速時は最大約120ms、高速時は1拍の15%に制限
+    const beatFlashRatio = Math.min(0.12 / beatDuration, 0.15);
+    const preGlow = beatProgress > 0.85;
+    const isBeatFlash = beatProgress < beatFlashRatio;
+    
+    let pathD = '';
+    let ptX = 0;
+    let ptY = 0;
+    const t = beatProgress;
+
+    // 図形マッピングロジック
+    if (effectiveBeatsPerBar === 2) {
+      // 2/4: Line (往復)
+      pathD = 'M 15 50 L 85 50';
+      if (currentBeatInBar === 0) {
+        ptX = 15 + 70 * t;
+        ptY = 50;
+      } else {
+        ptX = 85 - 70 * t;
+        ptY = 50;
+      }
+    } else if (effectiveBeatsPerBar === 3) {
+      // 3/4: Triangle
+      // 小節頭を上頂点に置く
+      pathD = 'M 50 20 L 80 80 L 20 80 Z';
+
+      if (currentBeatInBar === 0) {
+      // 1拍目: 上 → 右下
+      ptX = 50 + 30 * t;
+      ptY = 20 + 60 * t;
+      } else if (currentBeatInBar === 1) {
+      // 2拍目: 右下 → 左下
+      ptX = 80 - 60 * t;
+      ptY = 80;
+      } else {
+      // 3拍目: 左下 → 上
+      ptX = 20 + 30 * t;
+      ptY = 80 - 60 * t;
+      }
+    } else {
+      // 4/4 or Free: Square
+      pathD = 'M 20 20 L 80 20 L 80 80 L 20 80 Z';
+      if (currentBeatInBar === 0) {
+        ptX = 20 + 60 * t;
+        ptY = 20;
+      } else if (currentBeatInBar === 1) {
+        ptX = 80;
+        ptY = 20 + 60 * t;
+      } else if (currentBeatInBar === 2) {
+        ptX = 80 - 60 * t;
+        ptY = 80;
+      } else {
+        ptX = 20;
+        ptY = 80 - 60 * t;
+      }
+    }
+
+    // 発光ロジックの徹底適用（純白のみを使用）
+    const pathOpacity = isBeatFlash ? (isFirstBeat ? 0.82 : 0.72) : 0.24;
+    const pathStrokeWidth = isBeatFlash ? (isFirstBeat ? 1.25 : 1.05) : 0.65;
+    const pathGlow = isBeatFlash 
+      ? 'drop-shadow(0 0 2px rgba(255, 255, 255, 0.35))'
+      : 'none';
+
+    const pointOpacity = isBeatFlash ? 1.0 : (preGlow ? 0.8 : 0.65);
+    const pointRadius = isBeatFlash ? (isFirstBeat ? 3.2 : 2.8) : (preGlow ? 2.3 : 2.0);
+    const pointGlow = isBeatFlash
+      ? 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.55))'
+      : preGlow
+      ? 'drop-shadow(0 0 3px rgba(255, 255, 255, 0.35))'
+      : 'drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.18))';
+
+    return (
+      <div className="beacon-container">
+        <svg className="beacon-svg" viewBox="0 0 100 100">
+          <path 
+            className="beacon-path" 
+            d={pathD} 
+            stroke={`rgba(255, 255, 255, ${pathOpacity})`}
+            strokeWidth={pathStrokeWidth}
+            style={{ filter: pathGlow }}
+          />
+          <circle 
+            className="beacon-point"
+            cx={ptX}
+            cy={ptY}
+            r={pointRadius}
+            fillOpacity={pointOpacity}
+            style={{ filter: pointGlow }}
+          />
+        </svg>
+      </div>
+    );
+  };
+
   return (
     <main
       className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'} score-${viewMode}-mode phase-${tunePhase}`}
@@ -1048,6 +1159,9 @@ function App() {
           )}
         </>
       )}
+
+      {/* 💡 ここに Beacon Sweep の呼び出しを追加しております */}
+      {renderBeaconSweep()}
 
       {isRunning && visualEffect === 'Ghost Sweep' && (
         <div className="sweep-container">

@@ -37,7 +37,7 @@ export const clickSoundOptions: ClickSound[] = [
 ]
 
 export const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth', 'Triplet', 'Sixteenth']
-export const visualEffectOptions: VisualEffect[] = ['Ghost Sweep', 'Ripple', 'None']
+export const visualEffectOptions: VisualEffect[] = ['Ghost Sweep', 'Beacon Sweep', 'Ripple', 'None']
 
 export const spaceModeOptions: SpaceMode[] = ['Void', 'Dark', 'Blue']
 export const swipeModeOptions: SwipeMode[] = ['Score', 'Book']
