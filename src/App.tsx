@@ -985,83 +985,108 @@ function App() {
     
     // 拍頭強調判定（アクセント有効かつ小節頭の場合のみさらに強く光る）
     const isFirstBeat = !isFree && isBarAccentEnabled && currentBeatInBar === 0;
-    
-    // 状態判定：拍の直前（0.85〜）を予備発光、拍頭直後を瞬間発光とする
-    // 旦那様の至高のロジック：低速時は最大約120ms、高速時は1拍の15%に制限
-    const beatFlashRatio = Math.min(0.12 / beatDuration, 0.15);
-    const preGlow = beatProgress > 0.85;
-    const isBeatFlash = beatProgress < beatFlashRatio;
+
+    const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
+    const beatDecay = Math.pow(1 - beatProgress, 1.6);
+    const beatEnergy = beatDecay;
+
+    const accentBoost = isFirstBeat ? 1.12 : 1.0;
+    const frameEnergy = clamp01(beatEnergy * accentBoost);
+    const ghostEnergy = clamp01(beatEnergy * accentBoost);
     
     let pathD = '';
-    let ptX = 0;
-    let ptY = 0;
-    const t = beatProgress;
+    
+    // 💡 Path Ghost Head ロジック: 先頭と尾の座標を独立して計算
+    let headX = 0, headY = 0;
+    let tailX = 0, tailY = 0;
+    
+    // 残像の最大長（辺の15%）と、拍頭で生まれる最小のTime Slice（辺の1%）
+    const tailLength = 0.15;
+    const minSlice = 0.01; 
+    
+    let tHead = beatProgress;
+    const tTail = Math.max(0, beatProgress - tailLength);
+
+    // 💡 拍頭ゼロ長回避（Safari対策＆視覚的エッジ担保）
+    // 常に尾から最低限の長さ(minSlice)を前方に確保することで、拍頭の瞬間に短い切片として顕現させる
+    if (tHead - tTail < minSlice) {
+      tHead = Math.min(1, tTail + minSlice);
+    }
 
     // 図形マッピングロジック
     if (effectiveBeatsPerBar === 2) {
       // 2/4: Line (往復)
       pathD = 'M 15 50 L 85 50';
       if (currentBeatInBar === 0) {
-        ptX = 15 + 70 * t;
-        ptY = 50;
+        headX = 15 + 70 * tHead; headY = 50;
+        tailX = 15 + 70 * tTail; tailY = 50;
       } else {
-        ptX = 85 - 70 * t;
-        ptY = 50;
+        headX = 85 - 70 * tHead; headY = 50;
+        tailX = 85 - 70 * tTail; tailY = 50;
       }
     } else if (effectiveBeatsPerBar === 3) {
-      // 3/4: Triangle
-      // 小節頭を上頂点に置く
+      // 3/4: Triangle (小節頭を上頂点に置く)
       pathD = 'M 50 20 L 80 80 L 20 80 Z';
-
       if (currentBeatInBar === 0) {
-      // 1拍目: 上 → 右下
-      ptX = 50 + 30 * t;
-      ptY = 20 + 60 * t;
+        headX = 50 + 30 * tHead; headY = 20 + 60 * tHead;
+        tailX = 50 + 30 * tTail; tailY = 20 + 60 * tTail;
       } else if (currentBeatInBar === 1) {
-      // 2拍目: 右下 → 左下
-      ptX = 80 - 60 * t;
-      ptY = 80;
+        headX = 80 - 60 * tHead; headY = 80;
+        tailX = 80 - 60 * tTail; tailY = 80;
       } else {
-      // 3拍目: 左下 → 上
-      ptX = 20 + 30 * t;
-      ptY = 80 - 60 * t;
+        headX = 20 + 30 * tHead; headY = 80 - 60 * tHead;
+        tailX = 20 + 30 * tTail; tailY = 80 - 60 * tTail;
       }
     } else {
       // 4/4 or Free: Square
       pathD = 'M 20 20 L 80 20 L 80 80 L 20 80 Z';
       if (currentBeatInBar === 0) {
-        ptX = 20 + 60 * t;
-        ptY = 20;
+        headX = 20 + 60 * tHead; headY = 20;
+        tailX = 20 + 60 * tTail; tailY = 20;
       } else if (currentBeatInBar === 1) {
-        ptX = 80;
-        ptY = 20 + 60 * t;
+        headX = 80; headY = 20 + 60 * tHead;
+        tailX = 80; tailY = 20 + 60 * tTail;
       } else if (currentBeatInBar === 2) {
-        ptX = 80 - 60 * t;
-        ptY = 80;
+        headX = 80 - 60 * tHead; headY = 80;
+        tailX = 80 - 60 * tTail; tailY = 80;
       } else {
-        ptX = 20;
-        ptY = 80 - 60 * t;
+        headX = 20; headY = 80 - 60 * tHead;
+        tailX = 20; tailY = 80 - 60 * tTail;
       }
     }
 
-    // 発光ロジックの徹底適用（純白のみを使用）
-    const pathOpacity = isBeatFlash ? (isFirstBeat ? 0.82 : 0.72) : 0.24;
-    const pathStrokeWidth = isBeatFlash ? (isFirstBeat ? 1.25 : 1.05) : 0.65;
-    const pathGlow = isBeatFlash 
-      ? 'drop-shadow(0 0 2px rgba(255, 255, 255, 0.35))'
-      : 'none';
+    // 枠線の発光ロジック
+    const pathOpacity = 0.14 + 0.36 * frameEnergy;
+    const pathStrokeWidth = 0.45 + 0.35 * frameEnergy;
+    const pathGlow =
+      frameEnergy > 0.04
+        ? `drop-shadow(0 0 ${1.2 + 2.2 * frameEnergy}px rgba(255, 255, 255, ${0.18 + 0.22 * frameEnergy}))`
+        : 'none';
 
-    const pointOpacity = isBeatFlash ? 1.0 : (preGlow ? 0.8 : 0.65);
-    const pointRadius = isBeatFlash ? (isFirstBeat ? 3.2 : 2.8) : (preGlow ? 2.3 : 2.0);
-    const pointGlow = isBeatFlash
-      ? 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.55))'
-      : preGlow
-      ? 'drop-shadow(0 0 3px rgba(255, 255, 255, 0.35))'
-      : 'drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.18))';
+    // 💡 尾から先端へ向けた発光ロジック（白丸廃止、適度な太さへ調整）
+    const ghostOpacity = 0.6 + 0.4 * ghostEnergy;
+    const ghostStrokeWidth = 1.35 + 0.85 * ghostEnergy;
+    const ghostGlow =
+      ghostEnergy > 0.04
+        ? `drop-shadow(0 0 ${1.6 + 3.0 * ghostEnergy}px rgba(255, 255, 255, ${0.22 + 0.34 * ghostEnergy}))`
+        : 'drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))';
 
     return (
       <div className="beacon-container">
         <svg className="beacon-svg" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient 
+              id="ghostTailGradient" 
+              x1={tailX} y1={tailY} 
+              x2={headX} y2={headY} 
+              gradientUnits="userSpaceOnUse"
+            >
+              {/* iOS Safari対策: rgba()ではなくstopColorとstopOpacityで完全分離 */}
+              <stop offset="0%" stopColor="#ffffff" stopOpacity={0} />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity={1} />
+            </linearGradient>
+          </defs>
           <path 
             className="beacon-path" 
             d={pathD} 
@@ -1069,13 +1094,14 @@ function App() {
             strokeWidth={pathStrokeWidth}
             style={{ filter: pathGlow }}
           />
-          <circle 
-            className="beacon-point"
-            cx={ptX}
-            cy={ptY}
-            r={pointRadius}
-            fillOpacity={pointOpacity}
-            style={{ filter: pointGlow }}
+          <line 
+            x1={tailX} y1={tailY}
+            x2={headX} y2={headY}
+            stroke="url(#ghostTailGradient)"
+            strokeWidth={ghostStrokeWidth}
+            strokeLinecap="round"
+            opacity={ghostOpacity}
+            style={{ filter: ghostGlow }}
           />
         </svg>
       </div>

@@ -300,6 +300,38 @@ body {
 }
 
 /* =========================================
+   Beacon Sweep (視認補助エフェクト)
+   ========================================= */
+.beacon-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44vmin;
+  height: 44vmin;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.beacon-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.beacon-path {
+  fill: none;
+  transition: stroke-width 0.05s ease, stroke-opacity 0.05s ease, filter 0.05s ease;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.beacon-point {
+  fill: #ffffff;
+  transition: r 0.05s ease, fill-opacity 0.05s ease, filter 0.05s ease;
+}
+
+/* =========================================
    Ghost Sweep & Pillar (時間と空間)
    ========================================= */
 .sweep-container {
@@ -1976,6 +2008,122 @@ function App() {
   const centerWobble = tuneData.isStable ? (Math.sin(tuneTime * 0.35) * 3 + Math.sin(tuneTime * 0.5) * 0.15) : 0
   const finalTuneY = tuneY + centerWobble
 
+  // 💡 Beacon Sweep 専用描画レイヤー関数
+  const renderBeaconSweep = () => {
+    if (!isRunning || visualEffect !== 'Beacon Sweep') return null;
+
+    const exactBeat = elapsedTime > 0 ? elapsedTime / beatDuration : 0;
+    const beatProgress = exactBeat % 1;
+    
+    // Freeや特殊拍子はSquare(4拍子)として扱う
+    const isFree = timeSignature === 'Free';
+    const effectiveBeatsPerBar = isFree ? 4 : beatsPerBar; 
+    const currentBeatInBar = Math.floor(exactBeat) % effectiveBeatsPerBar;
+    
+    // 拍頭強調判定（アクセント有効かつ小節頭の場合のみさらに強く光る）
+    const isFirstBeat = !isFree && isBarAccentEnabled && currentBeatInBar === 0;
+
+    // 💡 予備発光を排除し、拍頭からの一拍かけた純粋な減衰のみでエネルギーを表現
+    const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
+    const beatDecay = Math.pow(1 - beatProgress, 1.6);
+    const beatEnergy = beatDecay;
+
+    const accentBoost = isFirstBeat ? 1.12 : 1.0;
+    const frameEnergy = clamp01(beatEnergy * accentBoost);
+    const pointEnergy = clamp01(beatEnergy * accentBoost);
+    
+    let pathD = '';
+    let ptX = 0;
+    let ptY = 0;
+    const t = beatProgress;
+
+    // 図形マッピングロジック
+    if (effectiveBeatsPerBar === 2) {
+      // 2/4: Line (往復)
+      pathD = 'M 15 50 L 85 50';
+      if (currentBeatInBar === 0) {
+        ptX = 15 + 70 * t;
+        ptY = 50;
+      } else {
+        ptX = 85 - 70 * t;
+        ptY = 50;
+      }
+    } else if (effectiveBeatsPerBar === 3) {
+      // 3/4: Triangle
+      // 小節頭を上頂点に置く
+      pathD = 'M 50 20 L 80 80 L 20 80 Z';
+
+      if (currentBeatInBar === 0) {
+      // 1拍目: 上 → 右下
+      ptX = 50 + 30 * t;
+      ptY = 20 + 60 * t;
+      } else if (currentBeatInBar === 1) {
+      // 2拍目: 右下 → 左下
+      ptX = 80 - 60 * t;
+      ptY = 80;
+      } else {
+      // 3拍目: 左下 → 上
+      ptX = 20 + 30 * t;
+      ptY = 80 - 60 * t;
+      }
+    } else {
+      // 4/4 or Free: Square
+      pathD = 'M 20 20 L 80 20 L 80 80 L 20 80 Z';
+      if (currentBeatInBar === 0) {
+        ptX = 20 + 60 * t;
+        ptY = 20;
+      } else if (currentBeatInBar === 1) {
+        ptX = 80;
+        ptY = 20 + 60 * t;
+      } else if (currentBeatInBar === 2) {
+        ptX = 80 - 60 * t;
+        ptY = 80;
+      } else {
+        ptX = 20;
+        ptY = 80 - 60 * t;
+      }
+    }
+
+    // 発光ロジックの徹底適用（純白のみを使用、連続的な減衰）
+    const pathOpacity = 0.18 + 0.42 * frameEnergy;
+    const pathStrokeWidth = 0.55 + 0.45 * frameEnergy;
+    const pathGlow =
+      frameEnergy > 0.04
+        ? `drop-shadow(0 0 ${1.2 + 2.2 * frameEnergy}px rgba(255, 255, 255, ${0.18 + 0.22 * frameEnergy}))`
+        : 'none';
+
+    // 移動点は核であるため常に不透明
+    const pointOpacity = 1;
+    const pointRadius = 2.0 + 0.75 * pointEnergy;
+    const pointGlow =
+      pointEnergy > 0.04
+        ? `drop-shadow(0 0 ${1.6 + 3.0 * pointEnergy}px rgba(255, 255, 255, ${0.22 + 0.34 * pointEnergy}))`
+        : 'drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))';
+
+    return (
+      <div className="beacon-container">
+        <svg className="beacon-svg" viewBox="0 0 100 100">
+          <path 
+            className="beacon-path" 
+            d={pathD} 
+            stroke={`rgba(255, 255, 255, ${pathOpacity})`}
+            strokeWidth={pathStrokeWidth}
+            style={{ filter: pathGlow }}
+          />
+          <circle 
+            className="beacon-point"
+            cx={ptX}
+            cy={ptY}
+            r={pointRadius}
+            fillOpacity={pointOpacity}
+            style={{ filter: pointGlow }}
+          />
+        </svg>
+      </div>
+    );
+  };
+
   return (
     <main
       className={`app ${isUiVisible ? 'ui-visible' : 'ui-hidden'} score-${viewMode}-mode phase-${tunePhase}`}
@@ -2053,6 +2201,9 @@ function App() {
           )}
         </>
       )}
+
+      {/* 💡 ここに Beacon Sweep の呼び出しを追加しております */}
+      {renderBeaconSweep()}
 
       {isRunning && visualEffect === 'Ghost Sweep' && (
         <div className="sweep-container">
@@ -3589,7 +3740,7 @@ export type ClickSound = 'Soft Tick' | 'Wood' | 'Metal' | 'Breath' | 'Muted Key'
 
 export type ClickSubdivision = 'Quarter' | 'Eighth' | 'Triplet' | 'Sixteenth'
 
-export type VisualEffect = 'Ghost Sweep' | 'Ripple' | 'None'
+export type VisualEffect = 'Ghost Sweep' | 'Beacon Sweep' | 'Ripple' | 'None'
 
 export type SpaceMode = 'Void' | 'Dark' | 'Blue'
 
@@ -3678,7 +3829,7 @@ export const clickSoundOptions: ClickSound[] = [
 ]
 
 export const clickSubdivisionOptions: ClickSubdivision[] = ['Quarter', 'Eighth', 'Triplet', 'Sixteenth']
-export const visualEffectOptions: VisualEffect[] = ['Ghost Sweep', 'Ripple', 'None']
+export const visualEffectOptions: VisualEffect[] = ['Ghost Sweep', 'Beacon Sweep', 'Ripple', 'None']
 
 export const spaceModeOptions: SpaceMode[] = ['Void', 'Dark', 'Blue']
 export const swipeModeOptions: SwipeMode[] = ['Score', 'Book']
