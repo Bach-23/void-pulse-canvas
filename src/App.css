@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Void Pulse Canvas - Core Architecture Stylesheet (Responsive Perfect Edition)
+   Void Pulse Canvas - Core Architecture Stylesheet (Touch Target Expansion)
    ========================================================================== */
 
 * {
@@ -287,14 +287,14 @@ body {
 }
 
 /* =========================================
-   UI & Controls (Main Panels)
+   UI & Controls (Main Panels - Touch Expanded)
    ========================================= */
 .hero {
   position: relative;
   z-index: 2;
-  width: min(960px, 94vw);
+  width: min(1040px, 94vw);
   text-align: center;
-  padding: 44px;
+  padding: 36px 28px 48px;
   margin: auto 0; /* 安全設計：コンテンツに余裕がある時は上下中央、溢れたら上詰め */
   backdrop-filter: blur(2px);
   transition:
@@ -304,7 +304,7 @@ body {
 }
 
 .eyebrow {
-  margin: 0 0 20px;
+  margin: 0 0 16px;
   color: rgba(220, 230, 245, 0.72);
   font-size: clamp(16px, 2.4vw, 28px);
   letter-spacing: 0.08em;
@@ -312,21 +312,22 @@ body {
 
 h1 {
   margin: 0;
-  font-size: clamp(52px, 8.4vw, 112px);
-  line-height: 0.95;
-  letter-spacing: -0.06em;
-  color: rgba(255, 255, 255, 0.94);
+  font-size: clamp(46px, 6vw, 82px);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: rgba(235, 240, 248, 0.82);
 }
 
 .subtitle {
-  margin: 34px 0 0;
+  margin: 26px 0 0;
   color: rgba(220, 230, 245, 0.78);
   font-size: clamp(17px, 3vw, 32px);
   letter-spacing: 0.05em;
 }
 
 .primary-action-row {
-  margin-top: 44px;
+  margin-top: 36px;
   display: flex;
   justify-content: center;
   gap: 16px;
@@ -334,6 +335,7 @@ h1 {
 
 .pulse-button {
   min-width: 260px;
+  min-height: 62px;
   padding: 20px 48px;
   border: 1px solid rgba(220, 235, 255, 0.44);
   border-radius: 999px;
@@ -377,30 +379,36 @@ h1 {
 }
 
 .secondary-controls {
-  margin-top: 26px;
+  margin-top: 30px;
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
+/* 💡 タッチターゲット拡張：外側の装飾余白を最小化し、内側の input / select 自体のhit areaを最大化 */
 .compact-control {
   display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid rgba(220, 230, 245, 0.18);
+  align-items: stretch;
+  min-height: 48px;
+  padding: 0 4px 0 16px;
+  border: 1px solid rgba(220, 230, 245, 0.22);
   border-radius: 999px;
-  background: rgba(5, 6, 8, 0.28);
-  color: rgba(245, 245, 245, 0.68);
+  background: rgba(5, 6, 8, 0.34);
+  color: rgba(245, 245, 245, 0.72);
   backdrop-filter: blur(8px);
   letter-spacing: 0.1em;
+  overflow: hidden;
 }
 
 .compact-control span {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
   text-transform: uppercase;
+  white-space: nowrap;
+  padding-right: 4px;
 }
 
 .compact-control input,
@@ -408,22 +416,26 @@ h1 {
   border: none;
   outline: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 14px;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 16px;
+  font-weight: 500;
   text-align: center;
+  min-height: 46px;
+  padding: 0 12px;
+  border-radius: 0 999px 999px 0;
 }
 
 .compact-control input {
-  width: 68px;
+  width: 96px;
 }
 
 .compact-control select {
-  width: 74px;
+  min-width: 104px;
   cursor: pointer;
 }
 
 .sound-control select {
-  width: 132px;
+  min-width: 168px;
 }
 
 .compact-control option {
@@ -431,30 +443,34 @@ h1 {
   color: #f5f5f5;
 }
 
-/* スイッチボタングループ */
+/* スイッチボタングループ（Button単体で46px以上の高さを確保） */
 .audio-switch-group,
 .score-switch-group,
 .debug-switch-group {
   display: inline-flex;
-  gap: 3px;
+  align-items: center;
+  gap: 4px;
   padding: 3px;
-  border: 1px solid rgba(220, 230, 245, 0.18);
+  min-height: 52px;
+  border: 1px solid rgba(220, 230, 245, 0.22);
   border-radius: 999px;
-  background: rgba(5, 6, 8, 0.28);
+  background: rgba(5, 6, 8, 0.34);
   backdrop-filter: blur(8px);
 }
 
 .audio-switch,
 .score-switch,
 .debug-switch {
-  padding: 8px 12px;
+  min-height: 46px;
+  padding: 10px 18px;
   border: none;
   border-radius: 999px;
   background: transparent;
-  color: rgba(220, 230, 245, 0.46);
-  font-size: 11px;
+  color: rgba(220, 230, 245, 0.56);
+  font-size: 13px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background 180ms ease,
@@ -465,17 +481,17 @@ h1 {
 .audio-switch:hover,
 .score-switch:hover,
 .debug-switch:hover {
-  color: rgba(245, 245, 245, 0.82);
+  color: rgba(245, 245, 245, 0.9);
 }
 
 .audio-switch.is-active,
 .score-switch.is-active,
 .debug-switch.is-active {
-  background: rgba(220, 235, 255, 0.16);
-  color: rgba(255, 255, 255, 0.92);
+  background: rgba(220, 235, 255, 0.18);
+  color: rgba(255, 255, 255, 0.96);
   box-shadow:
-    inset 0 0 14px rgba(220, 235, 255, 0.07),
-    0 0 16px rgba(190, 210, 255, 0.1);
+    inset 0 0 14px rgba(220, 235, 255, 0.08),
+    0 0 16px rgba(190, 210, 255, 0.12);
 }
 
 .score-switch:disabled,
@@ -485,55 +501,44 @@ h1 {
   pointer-events: none;
 }
 
+/* スライダーパネル（iPad Air 13-inch等の横幅を活かし可動域を拡大） */
 .sliders {
-  margin: 22px auto 0;
+  margin: 26px auto 0;
   display: grid;
-  gap: 8px;
-  width: min(480px, 90vw);
-  padding: 14px 16px;
-  border: 1px solid rgba(220, 230, 245, 0.12);
-  border-radius: 18px;
-  background: rgba(5, 6, 8, 0.22);
+  gap: 12px;
+  width: min(680px, 92vw);
+  padding: 18px 24px;
+  border: 1px solid rgba(220, 230, 245, 0.16);
+  border-radius: 22px;
+  background: rgba(5, 6, 8, 0.28);
   backdrop-filter: blur(10px);
 }
 
 .slider-control {
   display: grid;
-  grid-template-columns: 64px 1fr 32px;
+  grid-template-columns: 92px 1fr 44px;
   align-items: center;
-  gap: 10px;
-  color: rgba(220, 230, 245, 0.58);
-  font-size: 11px;
+  gap: 14px;
+  min-height: 48px;
+  color: rgba(220, 230, 245, 0.68);
+  font-size: 13px;
   letter-spacing: 0.11em;
   text-transform: uppercase;
 }
 
 .slider-control input {
   width: 100%;
-  accent-color: rgba(220, 235, 255, 0.78);
+  height: 44px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: rgba(220, 235, 255, 0.86);
 }
 
 .slider-control em {
   font-style: normal;
+  font-size: 14px;
   text-align: right;
-  color: rgba(245, 245, 245, 0.66);
-}
-
-.status {
-  position: fixed;
-  left: 32px;
-  bottom: 28px;
-  z-index: 3;
-  display: flex;
-  gap: 18px;
-  color: rgba(220, 230, 245, 0.56);
-  font-size: 12px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  transition:
-    opacity 500ms ease,
-    transform 500ms ease,
-    filter 500ms ease;
+  color: rgba(245, 245, 245, 0.78);
 }
 
 .ui-panel {
@@ -790,9 +795,10 @@ h1 {
   }
 
   h1 {
-    font-size: clamp(38px, 9vw, 48px);
-/* 横幅はみ出しを確実に防止するモバイル黄金比 */
-    letter-spacing: -0.04em;
+    font-size: clamp(32px, 8vw, 42px);
+    font-weight: 300;
+    letter-spacing: 0.01em;
+    color: rgba(235, 240, 248, 0.82);
   }
 
   .subtitle {
@@ -813,86 +819,96 @@ h1 {
   .pulse-button {
     width: min(300px, 100%);
     min-width: 0;
+    min-height: 54px;
 /* 固定幅を排し、あらゆるコンパクト画面に適応 */
     padding: 16px 32px;
     font-size: 15px;
     letter-spacing: 0.14em;
     white-space: nowrap;
-}
+  }
   
   .pulse-button + .pulse-button {
     margin-left: 0 !important;
 /* インラインスタイルの残留を完全に上書き隠滅 */
   }
 
-  /* コントロール・スライダーエリアの適正化 */
+  /* コントロール・スライダーエリアの適正化（タッチ領域44px以上を維持） */
   .secondary-controls {
-    gap: 8px;
+    gap: 10px;
     margin-top: 24px;
     width: 100%;
   }
 
   .compact-control {
-    padding: 6px 10px;
+    min-height: 44px;
+    padding: 0 4px 0 12px;
     font-size: 12px;
-}
+  }
+
+  .compact-control span {
+    font-size: 11px;
+  }
+
+  .compact-control input,
+  .compact-control select {
+    min-height: 42px;
+    padding: 0 8px;
+    font-size: 14px;
+  }
 
   .compact-control input {
-    width: 54px;
-    font-size: 13px;
-}
+    width: 68px;
+  }
 
   .compact-control select {
-    width: 64px;
-    font-size: 13px;
-}
+    min-width: 78px;
+  }
 
   .sound-control select {
-    width: min(105px, 100%);
+    min-width: 118px;
+    max-width: 100%;
 /* 音色の長い文字列がはみ出さないセーフ幅 */
   }
 
   .audio-switch-group,
   .score-switch-group,
   .debug-switch-group {
+    min-height: 46px;
     padding: 2px;
-}
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 
   .audio-switch,
   .score-switch,
   .debug-switch {
-    padding: 6px 10px;
-    font-size: 10px;
+    min-height: 42px;
+    padding: 8px 12px;
+    font-size: 11px;
     letter-spacing: 0.08em;
-}
+  }
 
   .sliders {
     width: 100%;
-    padding: 12px 14px;
+    padding: 14px;
     margin-top: 20px;
-    border-radius: 14px;
-}
+    border-radius: 16px;
+    gap: 10px;
+  }
 
   .slider-control {
-    grid-template-columns: 56px 1fr 28px;
-    gap: 8px;
-    font-size: 10px;
-}
+    grid-template-columns: 74px 1fr 34px;
+    gap: 10px;
+    min-height: 44px;
+    font-size: 11px;
+  }
 
-  /* ステータスパネルのフロー退避構造（B案の完全実装） */
-  .status {
-    position: relative;
-    left: auto;
-    bottom: auto;
-    z-index: 2;
-    margin: 40px auto 0;
-    width: 100%;
-    max-width: 100%;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 12px 16px;
-    font-size: 10px;
-    padding-bottom: calc(16px + env(safe-area-inset-bottom)); /* 下部ブラウザバーやセーフエリアとの衝突を完全防壁 */
+  .slider-control input {
+    height: 40px;
+  }
+
+  .slider-control em {
+    font-size: 12px;
   }
 
   .debug-panel {

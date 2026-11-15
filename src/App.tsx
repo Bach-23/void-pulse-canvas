@@ -123,14 +123,14 @@ function App() {
   const [scoreImageSource, setScoreImageSource] = useState(
     '/images/score-overlay-01.png',
   )
-  const [scoreImageName, setScoreImageName] = useState('Default Score')
+  const [, setScoreImageName] = useState('Default Score')
 
   const [pdfSlots, setPdfSlots] = useState<PdfSlot[]>(() =>
     createInitialPdfSlots(),
   )
   const [activePdfSlotIndex, setActivePdfSlotIndex] = useState(0)
 
-  const pdfDataCacheRef = useRef<Map<number, ArrayBuffer>>(new Map())
+const pdfDataCacheRef = useRef<Map<number, ArrayBuffer>>(new Map())
 
   const [debugMetrics, setDebugMetrics] = useState<DebugMetrics>({
     targetMs: 0,
@@ -342,7 +342,6 @@ function App() {
   const elapsedTime = getElapsedTime()
 
   const beatIndex = elapsedTime > 0 ? Math.floor(elapsedTime / beatDuration) : 0
-  const currentBeat = beatsPerBar === 1 ? 0 : beatIndex % beatsPerBar
 
   const sweepProgress = elapsedTime > 0 ? (elapsedTime % (beatDuration * beatsPerBar)) / (beatDuration * beatsPerBar) : 0
   const sweepLeft = timeSignature === 'Free' ? 7 : 7 + sweepProgress * 86
@@ -1604,30 +1603,6 @@ function App() {
           </div>
         </div>
       </section>
-
-      <div className="status ui-panel">
-        <span>{safeBpm} BPM</span>
-         <span>{timeSignature}</span>
-        <span>{clickSound}</span>
-        <span>{clickSubdivision}</span>
-        <span>VOL {volume}</span>
-        <span>{spaceMode}</span>
-        <span>{visualEffect}</span>
-        <span>{viewMode === 'void' ? 'Void Mode' : viewMode === 'tune' ? 'Tune Mode' : 'Plain Mode'}</span>
-        <span>{isScoreVisible ? 'Score ON' : 'Score OFF'}</span>
-        <span>{`Slot ${activePdfSlotIndex + 1}`}</span>
-        <span>{scoreImageName}</span>
-        <span>
-          {isPdfLoaded ? `PDF ${pdfPageNumber}/${pdfPageCount}` : 'PDF --'}
-        </span>
-        <span>
-          {timeSignature === 'Free'
-            ? 'No Meter'
-            : `Beat ${currentBeat + 1}`}
-        </span>
-        <span>{isRunning ? 'Pulse ON' : 'Pulse OFF'}</span>
-        <span>{isAudioEnabled ? 'Audio ON' : 'Audio OFF'}</span>
-      </div>
 
       {isDebugEnabled && (
         <div className="debug-panel ui-panel">
