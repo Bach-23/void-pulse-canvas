@@ -149,9 +149,6 @@ function App() {
   const {
     bpm,
     timeSignature,
-    breathIntensity,
-    smallRippleIntensity,
-    largeRippleIntensity,
     clickSound,
     clickSubdivision,
     visualEffect,
@@ -162,6 +159,14 @@ function App() {
     isBarAccentEnabled,
   } = settings
 
+  // 第一剪定: 指定6パラメーターの常時固定値
+  const breathIntensity = 50
+  const smallRippleIntensity = 50
+  const largeRippleIntensity = 50
+  const activeScoreOpacity = 100
+  const activeScoreWhiteCut = 50
+  const activeScoreInkBoost = 60
+
   const activePdfSlot = pdfSlots[activePdfSlotIndex]
   const isPdfLoaded = Boolean(activePdfSlot?.pdf)
   const pdfPageNumber = activePdfSlot?.pageNumber ?? 1
@@ -170,9 +175,6 @@ function App() {
   const activeScoreScale = activePdfSlot?.scoreScale ?? 72
   const activeScoreX = activePdfSlot?.scoreX ?? 0
   const activeScoreY = activePdfSlot?.scoreY ?? 0
-  const activeScoreOpacity = activePdfSlot?.scoreOpacity ?? 70
-  const activeScoreWhiteCut = activePdfSlot?.scoreWhiteCut ?? 80
-  const activeScoreInkBoost = activePdfSlot?.scoreInkBoost ?? 30
   const activeSwipeMode = activePdfSlot?.swipeMode ?? 'Score'
 
   const updateSettings = (nextSettings: Partial<SavedSettings>) => {
@@ -1516,22 +1518,6 @@ function App() {
               </button>
             </div>
 
-            <div className="debug-switch-group">
-              <button
-                className={`debug-switch ${isDebugEnabled ? 'is-active' : ''}`}
-                onClick={() => updateSettings({ isDebugEnabled: true })}
-              >
-                Debug ON
-              </button>
-
-              <button
-                className={`debug-switch ${!isDebugEnabled ? 'is-active' : ''}`}
-                onClick={() => updateSettings({ isDebugEnabled: false })}
-              >
-                Debug OFF
-              </button>
-            </div>
-
             <div className="score-switch-group">
               <button
                 className={`score-switch ${isScoreVisible ? 'is-active' : ''}`}
@@ -1560,22 +1546,6 @@ function App() {
               >
                 Load PDF
               </button>
-
-              <button
-                className="score-switch"
-                 disabled={!isPdfLoaded || pdfPageNumber <= 1}
-                onClick={showPreviousPdfPage}
-              >
-                PDF Prev
-              </button>
-
-              <button
-                className="score-switch"
-                 disabled={!isPdfLoaded || pdfPageNumber >= pdfPageCount}
-                onClick={showNextPdfPage}
-              >
-                PDF Next
-              </button>
             </div>
           </div>
 
@@ -1594,66 +1564,6 @@ function App() {
                 }
                />
               <em>{volume}</em>
-            </label>
-
-            <label className="slider-control">
-              <span>Breath</span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={breathIntensity}
-                onChange={(event) =>
-                  updateSettings({
-                    breathIntensity: Number(event.target.value),
-                  })
-                }
-              />
-              <em>{breathIntensity}</em>
-            </label>
-
-            <label className="slider-control">
-              <span>Small</span>
-               <input
-                type="range"
-                min="0"
-                max="100"
-                value={smallRippleIntensity}
-                onChange={(event) =>
-                  updateSettings({
-                    smallRippleIntensity: Number(event.target.value),
-                  })
-                }
-              />
-              <em>{smallRippleIntensity}</em>
-             </label>
-
-            <label className="slider-control">
-              <span>Large</span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={largeRippleIntensity}
-                onChange={(event) =>
-                  updateSettings({
-                    largeRippleIntensity: Number(event.target.value),
-                  })
-                }
-               />
-              <em>{largeRippleIntensity}</em>
-            </label>
-
-            <label className="slider-control">
-              <span>Score Visibility</span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={activeScoreOpacity}
-                onChange={(event) => updateActiveSlotSettings({ scoreOpacity: Number(event.target.value) })}
-              />
-              <em>{activeScoreOpacity}</em>
             </label>
 
             <label className="slider-control">
@@ -1690,30 +1600,6 @@ function App() {
                 onChange={(event) => updateActiveSlotSettings({ scoreY: Number(event.target.value) })}
               />
               <em>{activeScoreY}</em>
-            </label>
-
-            <label className="slider-control">
-               <span>Paper Cut</span>
-              <input
-                type="range"
-                min="50"
-                max="95"
-                value={activeScoreWhiteCut}
-                onChange={(event) => updateActiveSlotSettings({ scoreWhiteCut: Number(event.target.value) })}
-              />
-              <em>{activeScoreWhiteCut}</em>
-            </label>
-
-            <label className="slider-control">
-              <span>Ink Lift</span>
-              <input
-                type="range"
-                min="0"
-                max="60"
-                value={activeScoreInkBoost}
-                onChange={(event) => updateActiveSlotSettings({ scoreInkBoost: Number(event.target.value) })}
-              />
-              <em>{activeScoreInkBoost}</em>
             </label>
           </div>
         </div>
